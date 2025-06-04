@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SMS Gateway - Login</title>
+  <style>
+    :root {
+      --primary: #4a6fa5;
+      --primary-dark: #3a5985;
+      --secondary: #6c757d;
+      --success: #28a745;
+      --danger: #dc3545;
+      --warning: #ffc107;
+      --info: #17a2b8;
+      --light: #f8f9fa;
+      --dark: #343a40;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f4f7fa;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .login-container {
+      background-color: white;
+      border-radius: 10px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+      width: 90%;
+      max-width: 400px;
+      overflow: hidden;
+    }
+
+    .login-header {
+      background-color: var(--primary);
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .login-header h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+
+    .login-body {
+      padding: 30px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: var(--dark);
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ced4da;
+      border-radius: 5px;
+      font-size: 16px;
+      transition: border-color 0.3s;
+    }
+
+    .form-control:focus {
+      border-color: var(--primary);
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(74, 111, 165, 0.2);
+    }
+
+    .btn {
+      display: inline-block;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      border-radius: 5px;
+      width: 100%;
+      transition: background-color 0.3s;
+    }
+
+    .btn:hover {
+      background-color: var(--primary-dark);
+    }
+
+    .error-message {
+      color: var(--danger);
+      margin-top: 20px;
+      text-align: center;
+      font-size: 14px;
+      display: none;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 14px;
+      color: var(--secondary);
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    .spinner {
+      border: 3px solid #f3f3f3;
+      border-radius: 50%;
+      border-top: 3px solid var(--primary);
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 10px auto;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-header">
+      <h1>ESP32 SMS Gateway</h1>
+    </div>
+    <div class="login-body">
+      <form id="login-form">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" class="form-control" placeholder="Enter username" required />
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" class="form-control" placeholder="Enter password" required />
+        </div>
+        <button type="submit" class="btn">Login</button>
+      </form>
+      <div id="error-message" class="error-message"></div>
+      <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <p>Authenticating...</p>
+      </div>
+      <div class="footer">
+        <p>Developer-Oriented Smart SMS Gateway</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Removed the problematic event listener from here
+
+    let CONFIG = {};
+
+    fetch('../config.json')
+      .then(response => {
+        if (!response.ok) {
+          // More specific error message if config.json is not found or there's a server error
+          let errorMessage = `Failed to load config.json. Status: ${response.status}`;
+          if (response.status === 404) {
+            errorMessage = 'Configuration file (config.json) not found. Please ensure it exists in the correct location.';
+          }
+          throw new Error(errorMessage);
+        }
+        return response.json();
+      })
+      .then(config => {
+        CONFIG = config;
+        if (!CONFIG.API_BASE_URL) {
+            console.warn('API_BASE_URL is not defined in config.json. API calls might fail.');
+        }
+        initLogin();
+      })
+      .catch(error => {
+        // Display error more prominently for configuration issues
+        const loginBody = document.querySelector('.login-body');
+        if (loginBody) {
+            const configErrorDiv = document.createElement('div');
+            configErrorDiv.textContent = `Configuration Error: ${error.message}. Login functionality will not work. Please check the console for more details.`;
+            configErrorDiv.style.color = 'var(--danger)';
+            configErrorDiv.style.backgroundColor = 'rgba(220, 53, 69, 0.1)';
+            configErrorDiv.style.border = '1px solid var(--danger)';
+            configErrorDiv.style.padding = '10px';
+            configErrorDiv.style.borderRadius = '5px';
+            configErrorDiv.style.marginBottom = '15px';
+            loginBody.insertBefore(configErrorDiv, loginBody.firstChild);
+        } else {
+            alert(`Configuration load failed: ${error.message}. Please check config.json.`);
+        }
+        console.error('Error loading config:', error);
+        // Optionally, disable the form if config loading fails
+        const loginButton = document.querySelector('#login-form button[type="submit"]');
+        if (loginButton) {
+            loginButton.disabled = true;
+            loginButton.textContent = 'Login Disabled (Config Error)';
+            loginButton.style.backgroundColor = 'var(--secondary)';
+        }
+      });
+      
+   function initLogin() {
+    const token = localStorage.getItem('sms_gateway_token');
+    if (token) {
+        console.log('Token found, redirecting to dashboard');
+        window.location.href = 'dashboard.html';
+        return; // Important: exit if already "logged in"
+    }
+
+    const loginForm = document.getElementById('login-form');
+    const errorMessageDiv = document.getElementById('error-message'); // Renamed for clarity
+    const loadingDiv = document.getElementById('loading'); // Renamed for clarity
+
+    // Ensure elements exist before adding listeners
+    if (!loginForm || !errorMessageDiv || !loadingDiv) {
+        console.error('One or more essential DOM elements for login are missing.');
+        return;
+    }
+
+    loginForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        console.log("Login form submitted.");
+
+        errorMessageDiv.style.display = 'none';
+        loadingDiv.style.display = 'block';
+
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        
+        // Basic client-side validation (though 'required' attribute handles empty)
+        if (!usernameInput || !passwordInput) {
+            console.error('Username or password input fields not found.');
+            loadingDiv.style.display = 'none';
+            errorMessageDiv.textContent = 'Internal error: Form fields missing.';
+            errorMessageDiv.style.display = 'block';
+            return;
+        }
+
+        const username = usernameInput.value.trim();
+        const password = passwordInput.value.trim();
+
+        if (!username || !password) {
+            loadingDiv.style.display = 'none';
+            errorMessageDiv.textContent = 'Username and password are required.';
+            errorMessageDiv.style.display = 'block';
+            return;
+        }
+
+        if (!CONFIG.API_BASE_URL) {
+            loadingDiv.style.display = 'none';
+            errorMessageDiv.textContent = 'API configuration is missing. Cannot log in.';
+            errorMessageDiv.style.display = 'block';
+            console.error('Login attempt failed: API_BASE_URL not configured.');
+            return;
+        }
+
+        fetch(`${CONFIG.API_BASE_URL}/api/auth`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password }),
+        })
+        .then(async response => {
+            const responseBody = await response.text(); // Get text first to avoid JSON parse error on non-JSON response
+            if (!response.ok) {
+                console.error('Auth failed:', response.status, responseBody);
+                let errorMsg = 'Authentication failed. Please check your credentials.';
+                try {
+                    const errorJson = JSON.parse(responseBody);
+                    if (errorJson && errorJson.message) {
+                        errorMsg = errorJson.message;
+                    }
+                } catch (e) {
+                    // Not a JSON error response, use the generic one or responseBody if it's short
+                    if (responseBody && responseBody.length < 100) {
+                         errorMsg = responseBody;
+                    }
+                }
+                throw new Error(errorMsg);
+            }
+            try {
+                return JSON.parse(responseBody); // Now parse as JSON
+            } catch (e) {
+                console.error('Failed to parse successful login response as JSON:', responseBody);
+                throw new Error('Received an invalid response from the server.');
+            }
+        })
+        .then(data => {
+            console.log('Login successful:', data);
+            if (!data.token) {
+                throw new Error('Token missing in authentication response.');
+            }
+            localStorage.setItem('sms_gateway_token', data.token);
+            localStorage.setItem('sms_gateway_api_key', data.api_key || ''); // Handle if api_key is optional
+            localStorage.setItem('sms_gateway_username', data.username || username); // Store username from response or input
+            localStorage.setItem('sms_gateway_role', data.role || ''); // Handle if role is optional
+
+            window.location.href = 'dashboard.html';
+        })
+        .catch(error => {
+            loadingDiv.style.display = 'none';
+            errorMessageDiv.textContent = error.message || 'Invalid username or password. Please try again.';
+            errorMessageDiv.style.display = 'block';
+            console.error('Login Error:', error);
+        });
+    });
+}
+
+  </script>
+</body>
+</html>

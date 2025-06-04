@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMS Gateway - Dashboard</title>
+    <style>
+        :root {
+            --primary: #4a6fa5;
+            --primary-dark: #3a5985;
+            --secondary: #6c757d;
+            --success: #28a745;
+            --danger: #dc3545;
+            --warning: #ffc107;
+            --info: #17a2b8;
+            --light: #f8f9fa;
+            --dark: #343a40;
+            --gray-100: #f8f9fa;
+            --gray-200: #e9ecef;
+            --gray-300: #dee2e6;
+            --gray-400: #ced4da;
+            --gray-500: #adb5bd;
+            --gray-600: #6c757d;
+            --gray-700: #495057;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            background-color: #f4f7fa;
+            color: var(--dark);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background-color: var(--primary);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            position: sticky; /* Keep header at top */
+            top: 0;
+            z-index: 1000;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            margin: 0;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+        }
+
+        .user-info {
+            margin-right: 20px;
+            font-size: 14px;
+        }
+
+        .btn {
+            display: inline-block;
+            font-weight: 600;
+            text-align: center;
+            white-space: nowrap;
+            vertical-align: middle;
+            cursor: pointer;
+            border: 1px solid transparent;
+            padding: 8px 16px;
+            font-size: 14px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+        }
+
+        .btn-secondary {
+            background-color: var(--secondary);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background-color: #5a6268;
+        }
+
+        .btn-success {
+            background-color: var(--success);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #218838;
+        }
+
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+
+        .btn-sm {
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+
+        .container {
+            display: flex;
+            flex: 1;
+            overflow-y: hidden; /* Prevent body scroll, main-content will scroll */
+        }
+
+        .sidebar {
+            width: 250px;
+            background-color: white;
+            padding: 20px 0;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+            overflow-y: auto; /* Scroll sidebar if content is too long */
+        }
+
+        .sidebar-menu {
+            list-style: none;
+        }
+
+        .sidebar-menu li {
+            margin-bottom: 5px;
+        }
+
+        .sidebar-menu a {
+            display: block;
+            padding: 10px 20px;
+            color: var(--gray-700);
+            text-decoration: none;
+            border-left: 3px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .sidebar-menu a:hover,
+        .sidebar-menu a.active {
+            background-color: var(--gray-100);
+            color: var(--primary);
+            border-left-color: var(--primary);
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
+        }
+
+        .card-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--gray-200);
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-body {
+            padding: 20px;
+        }
+
+        .card-footer {
+            padding: 15px 20px;
+            border-top: 1px solid var(--gray-200);
+            background-color: var(--gray-100);
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--gray-400);
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.15s ease-in-out;
+        }
+
+        .form-control:focus {
+            border-color: var(--primary);
+            outline: 0;
+            box-shadow: 0 0 0 0.2rem rgba(74, 111, 165, 0.25);
+        }
+
+        textarea.form-control {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .table th,
+        .table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .table th {
+            background-color: var(--gray-100);
+            font-weight: 600;
+        }
+
+        .table tbody tr:hover {
+            background-color: var(--gray-100);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .badge-warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-danger {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .badge-info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .badge-secondary {
+            background-color: var(--gray-200);
+            color: var(--gray-700);
+        }
+
+        .alert {
+            padding: 12px 15px;
+            margin-bottom: 15px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border-color: #c3e6cb;
+        }
+
+        .alert-danger {
+            background-color: #f8d7da;
+            color: #721c24;
+            border-color: #f5c6cb;
+        }
+
+        .alert-info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border-color: #bee5eb;
+        }
+
+        .alert-warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border-color: #ffeeba;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .api-info {
+            background-color: var(--gray-100);
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-family: monospace;
+            word-break: break-all;
+        }
+
+        .api-key {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1050; /* Higher than header */
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        .modal.show {
+            display: flex;
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+            transform: translateY(-20px);
+            transition: transform 0.3s;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            max-height: 90vh;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal.show .modal-content {
+            transform: translateY(0);
+        }
+
+        .modal-header {
+            padding: 15px;
+            border-bottom: 1px solid var(--gray-200);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            margin: 0;
+            font-size: 18px;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--gray-600);
+            padding: 0;
+            line-height: 1;
+        }
+
+        .modal-body {
+            padding: 15px;
+            flex-grow: 1; /* Allow body to take available space */
+            overflow-y: auto; /* Scroll body if content overflows */
+        }
+
+        .modal-footer {
+            padding: 15px;
+            border-top: 1px solid var(--gray-200);
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .modal-footer button {
+            margin-left: 10px;
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: var(--primary);
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .message-bubble {
+            max-width: 80%;
+            padding: 10px 15px;
+            border-radius: 15px;
+            margin-bottom: 10px;
+            position: relative;
+            cursor: pointer;
+            word-wrap: break-word;
+        }
+
+        .message-received {
+            background-color: var(--gray-200);
+            margin-right: auto;
+            border-top-left-radius: 0;
+        }
+
+        .message-sent {
+            background-color: #d1e7fb;
+            margin-left: auto;
+            border-top-right-radius: 0;
+        }
+
+        .message-time {
+            font-size: 12px;
+            color: var(--gray-600);
+            display: block;
+            margin-top: 5px;
+        }
+
+        .message-sender {
+            font-weight: 600;
+            margin-bottom: 3px;
+        }
+
+        .messages-container {
+            overflow-y: auto;
+            max-height: 400px; /* Default max height */
+            margin-bottom: 15px;
+            padding-right: 5px;
+        }
+
+        .messages-empty {
+            text-align: center;
+            padding: 20px;
+            color: var(--gray-500);
+        }
+
+        #api-key-display {
+            word-break: break-all;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+
+        .status-online {
+            background-color: var(--success);
+        }
+
+        .status-offline {
+            background-color: var(--danger);
+        }
+
+        .text-center {
+            text-align: center !important;
+        }
+
+        .stats-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: space-around;
+        }
+
+        .stat-item {
+            background-color: var(--gray-100);
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+            flex-basis: calc(33.333% - 20px);
+            min-width: 150px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .stat-item h3 {
+            font-size: 16px;
+            color: var(--gray-700);
+            margin-bottom: 8px;
+        }
+
+        .stat-item p {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--primary);
+            margin: 0;
+        }
+
+        pre code {
+            display: block;
+            background-color: #2d2d2d; /* Dark background for code blocks */
+            color: #cccccc; /* Light text */
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+
+        @media (max-width: 992px) {
+            .stat-item {
+                flex-basis: calc(50% - 10px);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                padding: 10px 0;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+                overflow-y: initial; /* Remove scroll for horizontal menu */
+            }
+
+            .sidebar-menu {
+                display: flex;
+                overflow-x: auto;
+                white-space: nowrap;
+                padding-left: 10px;
+                padding-bottom: 5px; /* For scrollbar visibility */
+                margin-bottom: 0; /* Remove bottom margin when horizontal */
+            }
+
+            .sidebar-menu li {
+                margin-bottom: 0;
+                margin-right: 5px;
+            }
+
+            .sidebar-menu a {
+                padding: 8px 15px;
+                border-left: none;
+                border-bottom: 3px solid transparent;
+            }
+
+            .sidebar-menu a:hover,
+            .sidebar-menu a.active {
+                border-left-color: transparent;
+                border-bottom-color: var(--primary);
+            }
+
+            .stat-item {
+                flex-basis: 100%;
+            }
+            .header h1 {
+                font-size: 20px;
+            }
+            .user-info {
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>ESP32 SMS Gateway</h1>
+        <div class="header-actions">
+            <div class="user-info">
+                <span id="username-display">User</span>
+                <span class="status-indicator status-offline" id="status-indicator"></span>
+                <span id="status-text">Offline</span>
+            </div>
+            <button id="logout-btn" class="btn btn-secondary btn-sm">Logout</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="sidebar">
+            <ul class="sidebar-menu">
+                <li><a href="#" class="active" data-tab="dashboard-tab">Dashboard</a></li>
+                <li><a href="#" data-tab="send-sms-tab">Send SMS</a></li>
+                <li><a href="#" data-tab="inbox-tab">Inbox</a></li>
+                <li><a href="#" data-tab="outbox-tab">Outbox</a></li>
+                <li><a href="#" data-tab="logs-tab">Logs</a></li>
+                <li><a href="#" data-tab="api-tab">API Info</a></li>
+                <li><a href="#" data-tab="account-tab">Account</a></li>
+            </ul>
+        </div>
+
+        <div class="main-content">
+            <!-- Dashboard Tab -->
+            <div id="dashboard-tab" class="tab-content active">
+                <div class="card">
+                    <div class="card-header">System Overview</div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            Welcome to the ESP32 SMS Gateway dashboard. Use the sidebar to navigate.
+                        </div>
+                        <div class="card">
+                            <div class="card-header">System Statistics</div>
+                            <div class="card-body">
+                                <div class="stats-grid">
+                                    <div class="stat-item">
+                                        <h3>Messages Received</h3>
+                                        <p id="inbox-count">0</p>
+                                    </div>
+                                    <div class="stat-item">
+                                        <h3>Messages Sent</h3>
+                                        <p id="outbox-count">0</p>
+                                    </div>
+                                    <div class="stat-item">
+                                        <h3>System Log Events</h3>
+                                        <p id="logs-count">0</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header">Recent Activity</div>
+                            <div class="card-body">
+                                <div id="recent-activity" class="messages-container" style="max-height: 300px;">
+                                    <p class="messages-empty">Loading recent activity...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Send SMS Tab -->
+            <div id="send-sms-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">Send SMS</div>
+                    <div class="card-body">
+                        <form id="sms-form">
+                            <div class="form-group">
+                                <label for="recipient">Recipient Phone Number</label>
+                                <input type="tel" id="recipient" class="form-control" placeholder="+1234567890 (include country code)" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="message">Message</label>
+                                <textarea id="message" class="form-control" placeholder="Type your message here..." required rows="4"></textarea>
+                                <small id="character-count" class="form-text text-muted" style="display: block; margin-top: 5px;">0/160 characters</small>
+                            </div>
+                            <button type="submit" class="btn btn-success">Send Message</button>
+                        </form>
+                        <div id="send-result" class="alert" style="display: none; margin-top: 15px;"></div>
+                        <div id="send-spinner" class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Inbox Tab -->
+            <div id="inbox-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <span>Inbox Messages</span>
+                        <button id="refresh-inbox" class="btn btn-primary btn-sm">Refresh</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="inbox-spinner" class="spinner"></div>
+                        <div id="inbox-messages" class="messages-container">
+                            <p class="messages-empty">No messages in inbox</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Outbox Tab -->
+            <div id="outbox-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <span>Sent Messages</span>
+                        <button id="refresh-outbox" class="btn btn-primary btn-sm">Refresh</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="outbox-spinner" class="spinner"></div>
+                        <div id="outbox-messages" class="messages-container">
+                            <p class="messages-empty">No messages in outbox</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logs Tab -->
+            <div id="logs-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <span>System Logs</span>
+                        <button id="refresh-logs" class="btn btn-primary btn-sm">Refresh</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="logs-spinner" class="spinner"></div>
+                        <div style="overflow-x: auto;"> <!-- Make table horizontally scrollable on small screens -->
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Action</th>
+                                        <th>Details</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="logs-table-body">
+                                    <tr>
+                                        <td colspan="4" class="text-center">Loading logs...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- API Info Tab -->
+            <div id="api-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">API Information</div>
+                    <div class="card-body">
+                        <div class="api-info">
+                            <p><strong>API Base URL:</strong> <code id="api-base-url-display">Loading...</code></p>
+                            <p><strong>Your API Key:</strong> <span id="api-key-display" class="api-key">Loading...</span></p>
+                        </div>
+                        <h3>API Usage Examples</h3>
+                        <p>Replace <code>YOUR_API_KEY</code> with your actual API key.</p>
+                        <div class="api-examples">
+                            <h4>Sending SMS via API</h4>
+                            <pre><code>curl -X POST \
+  '[API_BASE_URL]/api/sms' \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: YOUR_API_KEY' \
+  -d '{
+    "recipient": "+1234567890",
+    "message": "Hello from the API!"
+  }'</code></pre>
+                            <h4>Getting Inbox Messages</h4>
+                            <pre><code>curl -X GET \
+  '[API_BASE_URL]/api/sms/inbox' \
+  -H 'X-API-Key: YOUR_API_KEY'</code></pre>
+                            <h4>Getting Outbox Messages</h4>
+                            <pre><code>curl -X GET \
+  '[API_BASE_URL]/api/sms/outbox' \
+  -H 'X-API-Key: YOUR_API_KEY'</code></pre>
+                            <h4>Getting System Logs</h4>
+                            <pre><code>curl -X GET \
+  '[API_BASE_URL]/api/logs' \
+  -H 'X-API-Key: YOUR_API_KEY'</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Account Tab -->
+            <div id="account-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">Account Information</div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label>Username</label>
+                            <p id="account-username">Loading...</p>
+                        </div>
+                        <div class="form-group">
+                            <label>Role</label>
+                            <p id="account-role">Loading...</p>
+                        </div>
+                        <div class="form-group">
+                            <label>API Key</label>
+                            <p id="account-api-key" style="word-break: break-all;">Loading...</p>
+                        </div>
+                        <button id="change-password-btn" class="btn btn-primary">Change Password</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="message-detail-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Message Details</h3>
+                <button type="button" class="modal-close" aria-label="Close">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>From/To:</label>
+                    <p id="modal-phone">Loading...</p>
+                </div>
+                <div class="form-group">
+                    <label>Date & Time:</label>
+                    <p id="modal-datetime">Loading...</p>
+                </div>
+                <div class="form-group">
+                    <label>Message:</label>
+                    <p id="modal-message" style="white-space: pre-wrap; word-break: break-word;">Loading...</p>
+                </div>
+                <div class="form-group">
+                    <label>Status:</label>
+                    <p id="modal-status">Loading...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary modal-close-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="change-password-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Change Password</h3>
+                <button type="button" class="modal-close" aria-label="Close">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="change-password-form">
+                    <div class="form-group">
+                        <label for="current-password">Current Password</label>
+                        <input type="password" id="current-password" class="form-control" required autocomplete="current-password">
+                    </div>
+                    <div class="form-group">
+                        <label for="new-password">New Password</label>
+                        <input type="password" id="new-password" class="form-control" required autocomplete="new-password">
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm-password">Confirm New Password</label>
+                        <input type="password" id="confirm-password" class="form-control" required autocomplete="new-password">
+                    </div>
+                    <div id="password-error" class="alert alert-danger" style="display: none;"></div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary modal-close-btn">Cancel</button>
+                <button type="button" id="save-password-btn" class="btn btn-primary">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            const token = localStorage.getItem('sms_gateway_token');
+            const apiKey = localStorage.getItem('sms_gateway_api_key');
+            const username = localStorage.getItem('sms_gateway_username');
+            const role = localStorage.getItem('sms_gateway_role');
+
+            if (!token) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            let CONFIG = {};
+            let API_BASE_URL = '';
+
+            try {
+                const response = await fetch('../config.json'); // Assumes config.json is in the same directory
+                if (!response.ok) {
+                    throw new Error(`Failed to load config.json: ${response.status} ${response.statusText}`);
+                }
+                CONFIG = await response.json();
+                API_BASE_URL = CONFIG.API_BASE_URL;
+                if (!API_BASE_URL) {
+                    throw new Error('API_BASE_URL not found in config.json');
+                }
+                console.log('Configuration loaded. API_BASE_URL:', API_BASE_URL);
+            } catch (error) {
+                console.error('Error loading configuration:', error);
+                document.body.innerHTML = `<div style="padding: 20px; text-align: center; color: red; background-color: #fff0f0; border: 1px solid red; margin: 20px;">
+                                               <h1>Configuration Error</h1>
+                                               <p>Could not load 'config.json' or 'API_BASE_URL' is missing.</p>
+                                               <p>Please ensure 'config.json' exists in the root directory relative to this HTML file and is correctly formatted with an "API_BASE_URL" property.</p>
+                                               <p>Example: <code>{ "API_BASE_URL": "http://localhost:3000" }</code></p>
+                                               <p><strong>Error details:</strong> ${error.message}</p>
+                                           </div>`;
+                return; 
+            }
+
+            const socket = io(API_BASE_URL, {
+                // transports: ['websocket'], // Optional: force websocket if polling issues
+                // auth: { token: token } // If your socket server uses token auth for connection
+            });
+            let isSocketConnected = false;
+
+            const statusIndicator = document.getElementById('status-indicator');
+            const statusText = document.getElementById('status-text');
+            const usernameDisplay = document.getElementById('username-display');
+            const inboxCountEl = document.getElementById('inbox-count');
+            const outboxCountEl = document.getElementById('outbox-count');
+            const logsCountEl = document.getElementById('logs-count');
+            const recentActivityEl = document.getElementById('recent-activity');
+            const characterCountEl = document.getElementById('character-count');
+            const messageDetailModal = document.getElementById('message-detail-modal');
+            const modalPhone = document.getElementById('modal-phone');
+            const modalDatetime = document.getElementById('modal-datetime');
+            const modalMessage = document.getElementById('modal-message');
+            const modalStatus = document.getElementById('modal-status');
+            const changePasswordModal = document.getElementById('change-password-modal');
+            const passwordError = document.getElementById('password-error');
+            const changePasswordForm = document.getElementById('change-password-form');
+
+            usernameDisplay.textContent = username || 'User';
+            document.getElementById('account-username').textContent = username || 'User';
+            document.getElementById('account-role').textContent = role || 'N/A';
+            document.getElementById('account-api-key').textContent = apiKey || 'Not Available';
+            document.getElementById('api-key-display').textContent = apiKey || 'Not Available';
+            document.getElementById('api-base-url-display').textContent = API_BASE_URL;
+
+            const tabLinks = document.querySelectorAll('.sidebar-menu a');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    tabLinks.forEach(l => l.classList.remove('active'));
+                    tabContents.forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                    const tabId = this.getAttribute('data-tab');
+                    document.getElementById(tabId).classList.add('active');
+                    loadTabData(tabId);
+                });
+            });
+
+            function loadTabData(tabId) {
+                switch (tabId) {
+                    case 'inbox-tab': fetchInbox(); break;
+                    case 'outbox-tab': fetchOutbox(); break;
+                    case 'logs-tab': fetchLogs(); break;
+                    case 'dashboard-tab': fetchDashboardData(); break;
+                }
+            }
+            
+            async function apiFetch(endpoint, options = {}) {
+                const defaultOptions = {
+                    headers: {
+                        'X-API-Key': apiKey,
+                        'Content-Type': 'application/json'
+                    }
+                };
+                const mergedOptions = { ...defaultOptions, ...options };
+                mergedOptions.headers = { ...defaultOptions.headers, ...options.headers };
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}${endpoint}`, mergedOptions);
+                    if (response.status === 401) { 
+                        addNotification('Session expired or invalid. Please log in again.', 'danger');
+                        logout(); // Call logout function
+                        throw new Error('Unauthorized');
+                    }
+                    if (!response.ok) {
+                        let errorData = { message: `HTTP error! status: ${response.status} - ${response.statusText}`};
+                        try {
+                            const jsonError = await response.json();
+                            if(jsonError && jsonError.message) errorData.message = jsonError.message;
+                        } catch (e) { /* Ignore if response is not JSON */ }
+                        console.error(`API Fetch Error for ${endpoint}:`, errorData.message, response);
+                        throw new Error(errorData.message);
+                    }
+                    // Handle empty response for non-JSON or 204 No Content
+                    const contentType = response.headers.get("content-type");
+                    if (response.status === 204 || !contentType || !contentType.includes("application/json")) {
+                        return response.text(); // Or return a specific object like { success: true }
+                    }
+                    return response.json();
+                } catch (error) {
+                    console.error(`Error fetching ${endpoint}:`, error.message); 
+                    addNotification(`Failed to fetch data from ${endpoint}: ${error.message}`, 'danger');
+                    throw error; 
+                }
+            }
+
+            async function fetchDashboardData() {
+                try {
+                    // Fetch full lists for counts and recent logs for activity
+                    const [inboxData, outboxData, logsDataForActivity] = await Promise.all([
+                        apiFetch('/api/sms/inbox'),    
+                        apiFetch('/api/sms/outbox'),   
+                        apiFetch('/api/logs?limit=5&sort=desc') // For recent activity
+                    ]);
+                    
+                    inboxCountEl.textContent = inboxData.messages ? inboxData.messages.length : 0;
+                    outboxCountEl.textContent = outboxData.messages ? outboxData.messages.length : 0;
+                    
+                    // For total logs count, you might need a separate call if /api/logs?limit=5 is used
+                    // Or if your backend returns total count even with limit, use that.
+                    // As a fallback, just show the count of displayed logs or fetch all if necessary:
+                    const allLogsData = await apiFetch('/api/logs'); // This could be slow if many logs
+                    logsCountEl.textContent = allLogsData.logs ? allLogsData.logs.length : (logsDataForActivity.logs ? logsDataForActivity.logs.length : 0);
+
+                    updateRecentActivity(logsDataForActivity.logs || []);
+
+                } catch (error) {
+                    inboxCountEl.textContent = 'N/A';
+                    outboxCountEl.textContent = 'N/A';
+                    logsCountEl.textContent = 'N/A';
+                    recentActivityEl.innerHTML = '<p class="messages-empty">Error loading dashboard data.</p>';
+                }
+            }
+
+            function updateRecentActivity(logs) {
+                if (!logs || logs.length === 0) {
+                    recentActivityEl.innerHTML = '<p class="messages-empty">No recent activity</p>';
+                    return;
+                }
+                // Assuming logs are already sorted if fetched with sort=desc
+                let activityHtml = logs.map(log => { 
+                    const date = new Date((log.timestamp || Date.now()/1000) * 1000); 
+                    const formattedDate = date.toLocaleString();
+                    let message = `Action: ${log.action || 'Unknown'}`;
+                    let alertClass = 'info';
+                    let details = log.details || {};
+
+                    if (log.action === 'send_sms_success' || log.action === 'sms_sent' || log.action === 'send_sms') {
+                        message = `SMS to ${details.recipient || log.recipient || 'N/A'} ${log.status ? '('+log.status+')' : ''}`;
+                        alertClass = (log.status === 'failed' || log.status === 'error') ? 'danger' : 'success';
+                    } else if (log.action === 'receive_sms' || log.action === 'sms_received') {
+                        message = `SMS received from ${details.sender || log.sender || 'N/A'}`;
+                        alertClass = 'info';
+                    } else if (log.action === 'user_login') {
+                        message = `User ${details.username || 'N/A'} logged in`;
+                        alertClass = 'warning';
+                    }  else if (log.action === 'api_request') {
+                        message = `API request to ${details.path || 'N/A'} from ${details.ip || 'N/A'}`;
+                        alertClass = 'secondary';
+                    }
+                    return `<div class="alert alert-${alertClass}"><strong>${formattedDate}</strong>: ${message}</div>`;
+                }).join('');
+                recentActivityEl.innerHTML = activityHtml;
+            }
+
+            function displayMessages(containerId, messages, type) {
+                const container = document.getElementById(containerId);
+                const spinnerId = containerId.replace('-messages', '-spinner');
+                const spinnerEl = document.getElementById(spinnerId);
+                if (spinnerEl) spinnerEl.style.display = 'none';
+
+                if (!messages || messages.length === 0) {
+                    container.innerHTML = `<p class="messages-empty">No messages ${type === 'received' ? 'in inbox' : 'in outbox'}</p>`;
+                    return;
+                }
+                
+                messages.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)); 
+
+                container.innerHTML = messages.map(msg => {
+                    const date = new Date((msg.timestamp || Date.now()/1000) * 1000);
+                    const formattedDate = date.toLocaleString();
+                    const senderReceiver = type === 'received' ? (msg.sender || 'Unknown') : `To: ${msg.recipient || 'Unknown'}`;
+                    return `
+                        <div class="message-bubble message-${type}" data-message-id="${msg.id || msg._id || Date.now()}"> <!-- Fallback ID -->
+                            <div class="message-sender">${senderReceiver}</div>
+                            <div>${msg.message || ''}</div>
+                            <span class="message-time">${formattedDate} - ${msg.status || 'N/A'}</span>
+                        </div>
+                    `;
+                }).join('');
+
+                container.querySelectorAll('.message-bubble').forEach(bubble => {
+                    bubble.addEventListener('click', function() {
+                        const messageId = this.getAttribute('data-message-id');
+                        const message = messages.find(m => (m.id || m._id || String(Date.now())) === messageId); // Match fallback
+                        if (message) showMessageDetail(message, type);
+                    });
+                });
+            }
+
+            async function fetchInbox() {
+                const spinner = document.getElementById('inbox-spinner');
+                if(spinner) spinner.style.display = 'block';
+                try {
+                    const data = await apiFetch('/api/sms/inbox');
+                    displayMessages('inbox-messages', data.messages, 'received');
+                } catch (error) {
+                    document.getElementById('inbox-messages').innerHTML = '<p class="messages-empty">Error loading inbox messages.</p>';
+                } finally {
+                    if(spinner) spinner.style.display = 'none';
+                }
+            }
+
+            async function fetchOutbox() {
+                const spinner = document.getElementById('outbox-spinner');
+                if(spinner) spinner.style.display = 'block';
+                try {
+                    const data = await apiFetch('/api/sms/outbox');
+                    displayMessages('outbox-messages', data.messages, 'sent');
+                } catch (error) {
+                    document.getElementById('outbox-messages').innerHTML = '<p class="messages-empty">Error loading outbox messages.</p>';
+                } finally {
+                    if(spinner) spinner.style.display = 'none';
+                }
+            }
+
+            async function fetchLogs() {
+                const spinner = document.getElementById('logs-spinner');
+                if(spinner) spinner.style.display = 'block';
+                const logsTableBody = document.getElementById('logs-table-body');
+                try {
+                    const data = await apiFetch('/api/logs');
+                    if (!data.logs || data.logs.length === 0) {
+                        logsTableBody.innerHTML = '<tr><td colspan="4" class="text-center">No logs available</td></tr>';
+                        return;
+                    }
+                    data.logs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+                    logsTableBody.innerHTML = data.logs.map(log => {
+                        const date = new Date((log.timestamp || Date.now()/1000) * 1000);
+                        const formattedDate = date.toLocaleString();
+                        
+                        let detailsText = 'N/A';
+                        if (log.details) {
+                            if (typeof log.details === 'string') {
+                                detailsText = log.details;
+                            } else if (typeof log.details === 'object') {
+                                detailsText = Object.entries(log.details)
+                                    .map(([key, value]) => `${key}: ${value}`)
+                                    .join(', ');
+                            }
+                        }
+                        
+                        if (log.action === 'send_sms_success' || log.action === 'sms_sent' || log.action === 'send_sms') detailsText = `To: ${log.details?.recipient || log.recipient || 'N/A'}`;
+                        if (log.action === 'receive_sms' || log.action === 'sms_received') detailsText = `From: ${log.details?.sender || log.sender || 'N/A'}`;
+                        
+                        let statusBadge = `<span class="badge badge-secondary">${(log.status || 'INFO').toUpperCase()}</span>`;
+                        const lowerStatus = (log.status || '').toLowerCase();
+                        if (['success', 'sent', 'delivered', 'ok'].includes(lowerStatus)) statusBadge = `<span class="badge badge-success">${log.status.toUpperCase()}</span>`;
+                        if (['failed', 'error'].includes(lowerStatus)) statusBadge = `<span class="badge badge-danger">${log.status.toUpperCase()}</span>`;
+                        if (['pending', 'queued', 'warning'].includes(lowerStatus)) statusBadge = `<span class="badge badge-warning">${log.status.toUpperCase()}</span>`;
+                        if (lowerStatus === 'info') statusBadge = `<span class="badge badge-info">${log.status.toUpperCase()}</span>`;
+
+                        return `
+                            <tr>
+                                <td>${formattedDate}</td>
+                                <td>${log.action || 'N/A'}</td>
+                                <td style="max-width: 300px; overflow-wrap: break-word;">${detailsText}</td>
+                                <td>${statusBadge}</td>
+                            </tr>`;
+                    }).join('');
+                } catch (error) {
+                    logsTableBody.innerHTML = '<tr><td colspan="4" class="text-center">Error loading logs.</td></tr>';
+                } finally {
+                     if(spinner) spinner.style.display = 'none';
+                }
+            }
+
+            const smsForm = document.getElementById('sms-form');
+            if (smsForm) {
+                smsForm.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    const recipient = document.getElementById('recipient').value;
+                    const message = document.getElementById('message').value;
+                    const sendResult = document.getElementById('send-result');
+                    const sendSpinner = document.getElementById('send-spinner');
+
+                    if (!recipient || !message) {
+                        sendResult.textContent = 'Recipient and message are required.';
+                        sendResult.className = 'alert alert-danger';
+                        sendResult.style.display = 'block';
+                        return;
+                    }
+
+                    sendResult.style.display = 'none';
+                    if(sendSpinner) sendSpinner.style.display = 'block';
+
+                    try {
+                        const data = await apiFetch('/api/sms', {
+                            method: 'POST',
+                            body: JSON.stringify({ recipient, message })
+                        });
+                        sendResult.textContent = data.message || 'SMS submitted successfully.';
+                        sendResult.className = 'alert alert-success';
+                        smsForm.reset();
+                        updateCharacterCount();
+                    } catch (error) {
+                        sendResult.textContent = `Failed to send SMS: ${error.message}`;
+                        sendResult.className = 'alert alert-danger';
+                    } finally {
+                        if(sendSpinner) sendSpinner.style.display = 'none';
+                        sendResult.style.display = 'block';
+                        setTimeout(() => { if(sendResult) sendResult.style.display = 'none'; }, 5000);
+                    }
+                });
+            }
+
+            const messageInput = document.getElementById('message');
+            function updateCharacterCount() {
+                if (!messageInput || !characterCountEl) return;
+                const length = messageInput.value.length;
+                characterCountEl.textContent = `${length}/160 characters`;
+                characterCountEl.style.color = length > 160 ? 'var(--danger)' : 'var(--gray-600)';
+            }
+            if (messageInput) messageInput.addEventListener('input', updateCharacterCount);
+
+
+            function showMessageDetail(message, type) {
+                modalPhone.textContent = type === 'received' ? (message.sender || 'N/A') : (message.recipient || 'N/A');
+                modalDatetime.textContent = new Date((message.timestamp || Date.now()/1000) * 1000).toLocaleString();
+                modalMessage.textContent = message.message || '';
+                modalStatus.textContent = message.status || 'N/A';
+                messageDetailModal.classList.add('show');
+            }
+
+            document.querySelectorAll('.modal-close, .modal-close-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    messageDetailModal.classList.remove('show');
+                    changePasswordModal.classList.remove('show');
+                });
+            });
+
+            document.getElementById('change-password-btn').addEventListener('click', () => {
+                changePasswordModal.classList.add('show');
+                passwordError.style.display = 'none';
+                changePasswordForm.reset();
+            });
+
+            document.getElementById('save-password-btn').addEventListener('click', async () => {
+                const currentPassword = document.getElementById('current-password').value;
+                const newPassword = document.getElementById('new-password').value;
+                const confirmPassword = document.getElementById('confirm-password').value;
+
+                passwordError.style.display = 'none';
+                if (!currentPassword || !newPassword || !confirmPassword) {
+                    passwordError.textContent = 'All fields are required.';
+                    passwordError.style.display = 'block'; return;
+                }
+                if (newPassword !== confirmPassword) {
+                    passwordError.textContent = 'New passwords do not match.';
+                    passwordError.style.display = 'block'; return;
+                }
+                if (newPassword.length < 6) { 
+                    passwordError.textContent = 'New password must be at least 6 characters.';
+                    passwordError.style.display = 'block'; return;
+                }
+
+                try {
+                    const data = await apiFetch('/api/auth/change-password', {
+                        method: 'POST',
+                        body: JSON.stringify({ currentPassword, newPassword })
+                    });
+                    passwordError.textContent = data.message || 'Password changed successfully!';
+                    passwordError.className = 'alert alert-success';
+                    passwordError.style.display = 'block';
+                    changePasswordForm.reset();
+                    setTimeout(() => {
+                         changePasswordModal.classList.remove('show');
+                         passwordError.style.display = 'none';
+                         passwordError.className = 'alert alert-danger'; 
+                    }, 2000);
+                } catch (error) {
+                    passwordError.textContent = `Error: ${error.message}`;
+                    passwordError.style.display = 'block';
+                }
+            });
+
+            document.getElementById('refresh-inbox').addEventListener('click', fetchInbox);
+            document.getElementById('refresh-outbox').addEventListener('click', fetchOutbox);
+            document.getElementById('refresh-logs').addEventListener('click', fetchLogs);
+
+            function logout() {
+                localStorage.removeItem('sms_gateway_token');
+                localStorage.removeItem('sms_gateway_api_key');
+                localStorage.removeItem('sms_gateway_username');
+                localStorage.removeItem('sms_gateway_role');
+                if(socket && socket.connected) socket.disconnect();
+                window.location.href = 'index.html';
+            }
+            document.getElementById('logout-btn').addEventListener('click', logout);
+
+            socket.on('connect', () => { isSocketConnected = true; updateConnectionStatus(); addNotification('Real-time connection established.', 'success');});
+            socket.on('disconnect', (reason) => { isSocketConnected = false; updateConnectionStatus(); addNotification(`Real-time connection lost: ${reason}`, 'warning');});
+            socket.on('connect_error', (err) => {isSocketConnected = false; updateConnectionStatus(); addNotification(`Socket Connection Error: ${err.message}`, 'danger'); console.error("Socket connect_error:", err);});
+
+            socket.on('new_sms_received', (data) => {
+                console.log('Socket event: new_sms_received', data);
+                addNotification(`New SMS received from ${data.sender || 'Unknown'}`, 'info');
+                if (document.getElementById('inbox-tab').classList.contains('active')) fetchInbox();
+                fetchDashboardData(); 
+            });
+
+            socket.on('sms_status_update', (data) => {
+                console.log('Socket event: sms_status_update', data);
+                addNotification(`SMS to ${data.recipient || 'Unknown'} status: ${data.status || 'N/A'}`, 
+                    data.status === 'sent' || data.status === 'delivered' ? 'success' : (data.status === 'failed' ? 'danger' : 'info'));
+                if (document.getElementById('outbox-tab').classList.contains('active')) fetchOutbox();
+                if (document.getElementById('logs-tab').classList.contains('active')) fetchLogs();
+                fetchDashboardData(); 
+            });
+             socket.on('new_log_entry', (data) => {
+                console.log('Socket event: new_log_entry', data);
+                let logMessage = `New log: ${data.action || 'N/A'}`;
+                if(data.details) {
+                    if (typeof data.details === 'string') logMessage += ` - ${data.details}`;
+                    else if (typeof data.details === 'object') logMessage += ` - ${JSON.stringify(data.details)}`;
+                }
+                if(data.status) logMessage += ` (${data.status})`;
+                addNotification(logMessage, 'info');
+
+                if (document.getElementById('logs-tab').classList.contains('active')) fetchLogs();
+                fetchDashboardData();
+            });
+
+            function updateConnectionStatus() {
+                statusIndicator.className = `status-indicator ${isSocketConnected ? 'status-online' : 'status-offline'}`;
+                statusText.textContent = isSocketConnected ? 'Connected' : 'Disconnected';
+            }
+
+            function addNotification(message, type = 'info') {
+                const timestamp = new Date().toLocaleTimeString();
+                const notificationHtml = `<div class="alert alert-${type}"><strong>${timestamp}</strong>: ${message}</div>`;
+                
+                const emptyMsg = recentActivityEl.querySelector('.messages-empty');
+                if (emptyMsg) {
+                    recentActivityEl.innerHTML = notificationHtml;
+                } else {
+                    recentActivityEl.insertAdjacentHTML('afterbegin', notificationHtml); 
+                }
+
+                const notifications = recentActivityEl.querySelectorAll('.alert');
+                if (notifications.length > 5) {
+                    notifications[notifications.length - 1].remove(); 
+                }
+            }
+            
+            document.querySelectorAll('pre code').forEach(code => {
+                code.innerHTML = code.innerHTML.replace(/\[API_BASE_URL\]/g, API_BASE_URL);
+                code.innerHTML = code.innerHTML.replace(/YOUR_API_KEY/g, apiKey || '[YOUR_API_KEY_HERE]');
+            });
+
+            fetchDashboardData();
+            updateConnectionStatus();
+            updateCharacterCount(); 
+        });
+    </script>
+</body>
+</html>
