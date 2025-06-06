@@ -618,6 +618,7 @@
                 <li><a href="#" data-tab="inbox-tab">Inbox</a></li>
                 <li><a href="#" data-tab="outbox-tab">Outbox</a></li>
                 <li><a href="#" data-tab="logs-tab">Logs</a></li>
+                <li><a href="#" data-tab="sim-management-tab">SIM Management</a></li>
                 <li><a href="#" data-tab="api-tab">API Info</a></li>
                 <li><a href="#" data-tab="account-tab">Account</a></li>
             </ul>
@@ -779,6 +780,36 @@
                 </div>
             </div>
 
+            <!-- SIM Management Tab -->
+            <div id="sim-management-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <span>SIM Card Management</span>
+                        <button id="add-sim-btn" class="btn btn-success btn-sm">Add New SIM</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="sim-spinner" class="spinner"></div>
+                        <div style="overflow-x: auto;">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Phone Number</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sim-table-body">
+                                    <tr>
+                                        <td colspan="4" class="text-center">Loading SIM cards...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- API Info Tab -->
             <div id="api-tab" class="tab-content">
                 <div class="card">
@@ -835,6 +866,67 @@
                             <p id="account-api-key" style="word-break: break-all;">Loading...</p>
                         </div>
                         <button id="change-password-btn" class="btn btn-primary">Change Password</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add SIM Modal -->
+            <div id="add-sim-modal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3 class="modal-title">Add New SIM Card</h3>
+                        <button type="button" class="modal-close" aria-label="Close">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="add-sim-form">
+                            <div class="form-group">
+                                <label for="sim-number">Phone Number</label>
+                                <input type="tel" id="sim-number" class="form-control" placeholder="+1234567890" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="sim-status">Status</label>
+                                <select id="sim-status" class="form-control" required>
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                </select>
+                            </div>
+                            <div id="add-sim-error" class="alert alert-danger" style="display: none;"></div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary modal-close-btn">Cancel</button>
+                        <button type="button" id="save-sim-btn" class="btn btn-primary">Save</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Edit SIM Modal -->
+            <div id="edit-sim-modal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3 class="modal-title">Edit SIM Card</h3>
+                        <button type="button" class="modal-close" aria-label="Close">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="edit-sim-form">
+                            <input type="hidden" id="edit-sim-id">
+                            <div class="form-group">
+                                <label for="edit-sim-number">Phone Number</label>
+                                <input type="tel" id="edit-sim-number" class="form-control" placeholder="+1234567890" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-sim-status">Status</label>
+                                <select id="edit-sim-status" class="form-control" required>
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                </select>
+                            </div>
+                            <div id="edit-sim-error" class="alert alert-danger" style="display: none;"></div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary modal-close-btn">Cancel</button>
+                        <button type="button" id="update-sim-btn" class="btn btn-primary">Update</button>
                     </div>
                 </div>
             </div>
@@ -1231,18 +1323,70 @@
 
             // Load available SIM cards
             async function loadSimCards() {
+                const spinner = document.getElementById('sim-spinner');
+                const tableBody = document.getElementById('sim-table-body');
+                
+                if(spinner) spinner.style.display = 'block';
                 try {
                     const data = await apiFetch('/api/sim-cards');
-                    simCardSelect.innerHTML = '<option value="">Select a SIM card...</option>';
-                    data.sim_cards.forEach(sim => {
-                        const option = document.createElement('option');
-                        option.value = sim.id;
-                        option.textContent = `${sim.number} (${sim.status})`;
-                        simCardSelect.appendChild(option);
+                    if (!data.sim_cards || data.sim_cards.length === 0) {
+                        tableBody.innerHTML = '<tr><td colspan="4" class="text-center">No SIM cards available</td></tr>';
+                        return;
+                    }
+                    
+                    tableBody.innerHTML = data.sim_cards.map(sim => {
+                        const statusBadge = sim.status === 'active' 
+                            ? '<span class="badge badge-success">Active</span>'
+                            : '<span class="badge badge-secondary">Inactive</span>';
+                        
+                        return `
+                            <tr>
+                                <td>${sim.id}</td>
+                                <td>${sim.number}</td>
+                                <td>${statusBadge}</td>
+                                <td>
+                                    <button class="btn btn-primary btn-sm edit-sim-btn" data-sim-id="${sim.id}">Edit</button>
+                                    <button class="btn btn-danger btn-sm delete-sim-btn" data-sim-id="${sim.id}">Delete</button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('');
+
+                    // Add event listeners to buttons
+                    document.querySelectorAll('.edit-sim-btn').forEach(btn => {
+                        btn.addEventListener('click', () => {
+                            const simId = btn.getAttribute('data-sim-id');
+                            const sim = data.sim_cards.find(s => s.id === simId);
+                            if (sim) {
+                                document.getElementById('edit-sim-id').value = sim.id;
+                                document.getElementById('edit-sim-number').value = sim.number;
+                                document.getElementById('edit-sim-status').value = sim.status;
+                                editSimModal.classList.add('show');
+                            }
+                        });
+                    });
+
+                    document.querySelectorAll('.delete-sim-btn').forEach(btn => {
+                        btn.addEventListener('click', async () => {
+                            if (confirm('Are you sure you want to delete this SIM card?')) {
+                                const simId = btn.getAttribute('data-sim-id');
+                                try {
+                                    await apiFetch(`/api/sim-cards/${simId}`, {
+                                        method: 'DELETE'
+                                    });
+                                    loadSimCards();
+                                    addNotification('SIM card deleted successfully', 'success');
+                                } catch (error) {
+                                    addNotification(`Failed to delete SIM card: ${error.message}`, 'danger');
+                                }
+                            }
+                        });
                     });
                 } catch (error) {
-                    console.error('Error loading SIM cards:', error);
-                    addNotification('Failed to load SIM cards', 'danger');
+                    tableBody.innerHTML = '<tr><td colspan="4" class="text-center">Error loading SIM cards</td></tr>';
+                    addNotification(`Failed to load SIM cards: ${error.message}`, 'danger');
+                } finally {
+                    if(spinner) spinner.style.display = 'none';
                 }
             }
 
@@ -1534,6 +1678,169 @@
             fetchDashboardData();
             updateConnectionStatus();
             updateCharacterCount(); 
+
+            // SIM Management
+            const addSimModal = document.getElementById('add-sim-modal');
+            const editSimModal = document.getElementById('edit-sim-modal');
+            const addSimForm = document.getElementById('add-sim-form');
+            const editSimForm = document.getElementById('edit-sim-form');
+            const addSimError = document.getElementById('add-sim-error');
+            const editSimError = document.getElementById('edit-sim-error');
+            const simNumberInput = document.getElementById('sim-number');
+            const editSimNumberInput = document.getElementById('edit-sim-number');
+
+            // Add phone number validation to SIM number inputs
+            if (simNumberInput) {
+                simNumberInput.addEventListener('input', function() {
+                    validatePhoneNumber(this);
+                });
+            }
+            if (editSimNumberInput) {
+                editSimNumberInput.addEventListener('input', function() {
+                    validatePhoneNumber(this);
+                });
+            }
+
+            // Load SIM cards
+            async function loadSimCards() {
+                const spinner = document.getElementById('sim-spinner');
+                const tableBody = document.getElementById('sim-table-body');
+                
+                if(spinner) spinner.style.display = 'block';
+                try {
+                    const data = await apiFetch('/api/sim-cards');
+                    if (!data.sim_cards || data.sim_cards.length === 0) {
+                        tableBody.innerHTML = '<tr><td colspan="4" class="text-center">No SIM cards available</td></tr>';
+                        return;
+                    }
+                    
+                    tableBody.innerHTML = data.sim_cards.map(sim => {
+                        const statusBadge = sim.status === 'active' 
+                            ? '<span class="badge badge-success">Active</span>'
+                            : '<span class="badge badge-secondary">Inactive</span>';
+                        
+                        return `
+                            <tr>
+                                <td>${sim.id}</td>
+                                <td>${sim.number}</td>
+                                <td>${statusBadge}</td>
+                                <td>
+                                    <button class="btn btn-primary btn-sm edit-sim-btn" data-sim-id="${sim.id}">Edit</button>
+                                    <button class="btn btn-danger btn-sm delete-sim-btn" data-sim-id="${sim.id}">Delete</button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('');
+
+                    // Add event listeners to buttons
+                    document.querySelectorAll('.edit-sim-btn').forEach(btn => {
+                        btn.addEventListener('click', () => {
+                            const simId = btn.getAttribute('data-sim-id');
+                            const sim = data.sim_cards.find(s => s.id === simId);
+                            if (sim) {
+                                document.getElementById('edit-sim-id').value = sim.id;
+                                document.getElementById('edit-sim-number').value = sim.number;
+                                document.getElementById('edit-sim-status').value = sim.status;
+                                editSimModal.classList.add('show');
+                            }
+                        });
+                    });
+
+                    document.querySelectorAll('.delete-sim-btn').forEach(btn => {
+                        btn.addEventListener('click', async () => {
+                            if (confirm('Are you sure you want to delete this SIM card?')) {
+                                const simId = btn.getAttribute('data-sim-id');
+                                try {
+                                    await apiFetch(`/api/sim-cards/${simId}`, {
+                                        method: 'DELETE'
+                                    });
+                                    loadSimCards();
+                                    addNotification('SIM card deleted successfully', 'success');
+                                } catch (error) {
+                                    addNotification(`Failed to delete SIM card: ${error.message}`, 'danger');
+                                }
+                            }
+                        });
+                    });
+                } catch (error) {
+                    tableBody.innerHTML = '<tr><td colspan="4" class="text-center">Error loading SIM cards</td></tr>';
+                    addNotification(`Failed to load SIM cards: ${error.message}`, 'danger');
+                } finally {
+                    if(spinner) spinner.style.display = 'none';
+                }
+            }
+
+            // Add SIM card
+            document.getElementById('add-sim-btn').addEventListener('click', () => {
+                addSimModal.classList.add('show');
+                addSimForm.reset();
+                addSimError.style.display = 'none';
+            });
+
+            document.getElementById('save-sim-btn').addEventListener('click', async () => {
+                const number = document.getElementById('sim-number').value;
+                const status = document.getElementById('sim-status').value;
+
+                if (!number) {
+                    addSimError.textContent = 'Phone number is required';
+                    addSimError.style.display = 'block';
+                    return;
+                }
+
+                try {
+                    const data = await apiFetch('/api/sim-cards', {
+                        method: 'POST',
+                        body: JSON.stringify({ number, status })
+                    });
+                    addSimModal.classList.remove('show');
+                    loadSimCards();
+                    addNotification('SIM card added successfully', 'success');
+                } catch (error) {
+                    addSimError.textContent = `Failed to add SIM card: ${error.message}`;
+                    addSimError.style.display = 'block';
+                }
+            });
+
+            // Update SIM card
+            document.getElementById('update-sim-btn').addEventListener('click', async () => {
+                const simId = document.getElementById('edit-sim-id').value;
+                const number = document.getElementById('edit-sim-number').value;
+                const status = document.getElementById('edit-sim-status').value;
+
+                if (!number) {
+                    editSimError.textContent = 'Phone number is required';
+                    editSimError.style.display = 'block';
+                    return;
+                }
+
+                try {
+                    const data = await apiFetch(`/api/sim-cards/${simId}`, {
+                        method: 'PUT',
+                        body: JSON.stringify({ number, status })
+                    });
+                    editSimModal.classList.remove('show');
+                    loadSimCards();
+                    addNotification('SIM card updated successfully', 'success');
+                } catch (error) {
+                    editSimError.textContent = `Failed to update SIM card: ${error.message}`;
+                    editSimError.style.display = 'block';
+                }
+            });
+
+            // Close modals
+            document.querySelectorAll('.modal-close, .modal-close-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    addSimModal.classList.remove('show');
+                    editSimModal.classList.remove('show');
+                    messageDetailModal.classList.remove('show');
+                    changePasswordModal.classList.remove('show');
+                });
+            });
+
+            // Load SIM cards when tab is active
+            document.querySelector('a[data-tab="sim-management-tab"]').addEventListener('click', () => {
+                loadSimCards();
+            });
         });
     </script>
 </body>

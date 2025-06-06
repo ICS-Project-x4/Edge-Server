@@ -146,12 +146,127 @@ def auth():
         'role': user.get('role', 'user')
     })
 
-# Get available SIM cards endpoint
+# SIM Card Management Endpoints
 @app.route('/api/sim-cards', methods=['GET'])
 @require_api_key
 def get_sim_cards():
     return jsonify({
         'sim_cards': available_sim_cards
+    })
+
+@app.route('/api/sim-cards', methods=['POST'])
+@require_api_key
+def add_sim_card():
+    data = request.get_json()
+    
+    # Validate input
+    if not data.get('number'):
+        return jsonify({'message': 'SIM card number is required!'}), 400
+    
+    # Process phone number format
+    number = data['number'].strip().replace(' ', '')
+    if not number.startswith('+'):
+        number = '+' + number
+    
+    # Generate unique ID
+    sim_id = f"sim{len(available_sim_cards) + 1}"
+    
+    # Create new SIM card
+    new_sim = {
+        'id': sim_id,
+        'number': number,
+        'status': data.get('status', 'active')
+    }
+    
+    # Add to list
+    available_sim_cards.append(new_sim)
+    
+    # Log the action
+    log_entry = {
+        'id': str(uuid.uuid4()),
+        'timestamp': time.time(),
+        'action': 'add_sim_card',
+        'sim_id': sim_id,
+        'number': number,
+        'status': 'success'
+    }
+    logs.append(log_entry)
+    
+    return jsonify({
+        'message': 'SIM card added successfully',
+        'sim_card': new_sim
+    })
+
+@app.route('/api/sim-cards/<sim_id>', methods=['PUT'])
+@require_api_key
+def update_sim_card(sim_id):
+    data = request.get_json()
+    
+    # Find the SIM card
+    sim_card = None
+    for sim in available_sim_cards:
+        if sim['id'] == sim_id:
+            sim_card = sim
+            break
+    
+    if not sim_card:
+        return jsonify({'message': 'SIM card not found!'}), 404
+    
+    # Update fields
+    if 'number' in data:
+        number = data['number'].strip().replace(' ', '')
+        if not number.startswith('+'):
+            number = '+' + number
+        sim_card['number'] = number
+    
+    if 'status' in data:
+        sim_card['status'] = data['status']
+    
+    # Log the action
+    log_entry = {
+        'id': str(uuid.uuid4()),
+        'timestamp': time.time(),
+        'action': 'update_sim_card',
+        'sim_id': sim_id,
+        'number': sim_card['number'],
+        'status': 'success'
+    }
+    logs.append(log_entry)
+    
+    return jsonify({
+        'message': 'SIM card updated successfully',
+        'sim_card': sim_card
+    })
+
+@app.route('/api/sim-cards/<sim_id>', methods=['DELETE'])
+@require_api_key
+def delete_sim_card(sim_id):
+    # Find the SIM card
+    sim_card = None
+    for sim in available_sim_cards:
+        if sim['id'] == sim_id:
+            sim_card = sim
+            break
+    
+    if not sim_card:
+        return jsonify({'message': 'SIM card not found!'}), 404
+    
+    # Remove from list
+    available_sim_cards.remove(sim_card)
+    
+    # Log the action
+    log_entry = {
+        'id': str(uuid.uuid4()),
+        'timestamp': time.time(),
+        'action': 'delete_sim_card',
+        'sim_id': sim_id,
+        'number': sim_card['number'],
+        'status': 'success'
+    }
+    logs.append(log_entry)
+    
+    return jsonify({
+        'message': 'SIM card deleted successfully'
     })
 
 # Send SMS endpoint
