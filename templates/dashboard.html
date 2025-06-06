@@ -764,12 +764,13 @@
                                         <th>Timestamp</th>
                                         <th>Action</th>
                                         <th>Details</th>
+                                        <th>SIM Card</th>
                                         <th>Status</th>
                                     </tr>
                                 </thead>
                                 <tbody id="logs-table-body">
                                     <tr>
-                                        <td colspan="4" class="text-center">Loading logs...</td>
+                                        <td colspan="5" class="text-center">Loading logs...</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -1110,11 +1111,12 @@
                     const date = new Date((msg.timestamp || Date.now()/1000) * 1000);
                     const formattedDate = date.toLocaleString();
                     const senderReceiver = type === 'received' ? (msg.sender || 'Unknown') : `To: ${msg.recipient || 'Unknown'}`;
+                    const simInfo = type === 'sent' && msg.sender_sim ? `<br><small class="text-muted">From SIM: ${msg.sender_sim}</small>` : '';
                     return `
-                        <div class="message-bubble message-${type}" data-message-id="${msg.id || msg._id || Date.now()}"> <!-- Fallback ID -->
+                        <div class="message-bubble message-${type}" data-message-id="${msg.id || msg._id || Date.now()}">
                             <div class="message-sender">${senderReceiver}</div>
                             <div>${msg.message || ''}</div>
-                            <span class="message-time">${formattedDate} - ${msg.status || 'N/A'}</span>
+                            <span class="message-time">${formattedDate} - ${msg.status || 'N/A'}${simInfo}</span>
                         </div>
                     `;
                 }).join('');
@@ -1122,7 +1124,7 @@
                 container.querySelectorAll('.message-bubble').forEach(bubble => {
                     bubble.addEventListener('click', function() {
                         const messageId = this.getAttribute('data-message-id');
-                        const message = messages.find(m => (m.id || m._id || String(Date.now())) === messageId); // Match fallback
+                        const message = messages.find(m => (m.id || m._id || String(Date.now())) === messageId);
                         if (message) showMessageDetail(message, type);
                     });
                 });
@@ -1161,7 +1163,7 @@
                 try {
                     const data = await apiFetch('/api/logs');
                     if (!data.logs || data.logs.length === 0) {
-                        logsTableBody.innerHTML = '<tr><td colspan="4" class="text-center">No logs available</td></tr>';
+                        logsTableBody.innerHTML = '<tr><td colspan="5" class="text-center">No logs available</td></tr>';
                         return;
                     }
                     data.logs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
@@ -1180,8 +1182,20 @@
                             }
                         }
                         
-                        if (log.action === 'send_sms_success' || log.action === 'sms_sent' || log.action === 'send_sms') detailsText = `To: ${log.details?.recipient || log.recipient || 'N/A'}`;
-                        if (log.action === 'receive_sms' || log.action === 'sms_received') detailsText = `From: ${log.details?.sender || log.sender || 'N/A'}`;
+                        if (log.action === 'send_sms_success' || log.action === 'sms_sent' || log.action === 'send_sms') {
+                            detailsText = `To: ${log.details?.recipient || log.recipient || 'N/A'}`;
+                        }
+                        if (log.action === 'receive_sms' || log.action === 'sms_received') {
+                            detailsText = `From: ${log.details?.sender || log.sender || 'N/A'}`;
+                        }
+
+                        // SIM Card column
+                        let simCardText = 'N/A';
+                        if (log.sender_sim) {
+                            simCardText = log.sender_sim;
+                        } else if (log.action === 'send_sms_success' || log.action === 'sms_sent' || log.action === 'send_sms') {
+                            simCardText = 'Auto-selected';
+                        }
                         
                         let statusBadge = `<span class="badge badge-secondary">${(log.status || 'INFO').toUpperCase()}</span>`;
                         const lowerStatus = (log.status || '').toLowerCase();
@@ -1195,11 +1209,12 @@
                                 <td>${formattedDate}</td>
                                 <td>${log.action || 'N/A'}</td>
                                 <td style="max-width: 300px; overflow-wrap: break-word;">${detailsText}</td>
+                                <td>${simCardText}</td>
                                 <td>${statusBadge}</td>
                             </tr>`;
                     }).join('');
                 } catch (error) {
-                    logsTableBody.innerHTML = '<tr><td colspan="4" class="text-center">Error loading logs.</td></tr>';
+                    logsTableBody.innerHTML = '<tr><td colspan="5" class="text-center">Error loading logs.</td></tr>';
                 } finally {
                      if(spinner) spinner.style.display = 'none';
                 }
@@ -1384,6 +1399,9 @@
                 modalDatetime.textContent = new Date((message.timestamp || Date.now()/1000) * 1000).toLocaleString();
                 modalMessage.textContent = message.message || '';
                 modalStatus.textContent = message.status || 'N/A';
+                if (type === 'sent' && message.sender_sim) {
+                    modalStatus.innerHTML += `<br><small class="text-muted">From SIM: ${message.sender_sim}</small>`;
+                }
                 messageDetailModal.classList.add('show');
             }
 
