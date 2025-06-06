@@ -668,7 +668,16 @@
                 <div class="card">
                     <div class="card-header">Send SMS</div>
                     <div class="card-body">
-                        <form id="sms-form">
+                        <div class="form-group">
+                            <label>Send Method:</label>
+                            <div class="btn-group" role="group" style="margin-bottom: 15px;">
+                                <button type="button" class="btn btn-primary active" id="auto-sim-btn">Auto Select SIM</button>
+                                <button type="button" class="btn btn-secondary" id="specific-sim-btn">Choose Specific SIM</button>
+                            </div>
+                        </div>
+
+                        <!-- Auto SIM Selection Form -->
+                        <form id="auto-sim-form">
                             <div class="form-group">
                                 <label for="recipient">Recipient Phone Number</label>
                                 <input type="tel" id="recipient" class="form-control" placeholder="+1234567890 (include country code)" required>
@@ -680,6 +689,27 @@
                             </div>
                             <button type="submit" class="btn btn-success">Send Message</button>
                         </form>
+
+                        <!-- Specific SIM Selection Form -->
+                        <form id="specific-sim-form" style="display: none;">
+                            <div class="form-group">
+                                <label for="sim-card-select">Select SIM Card</label>
+                                <select id="sim-card-select" class="form-control" required>
+                                    <option value="">Select a SIM card...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="specific-recipient">Recipient Phone Number</label>
+                                <input type="tel" id="specific-recipient" class="form-control" placeholder="+1234567890 (include country code)" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="specific-message">Message</label>
+                                <textarea id="specific-message" class="form-control" placeholder="Type your message here..." required rows="4"></textarea>
+                                <small id="specific-character-count" class="form-text text-muted" style="display: block; margin-top: 5px;">0/160 characters</small>
+                            </div>
+                            <button type="submit" class="btn btn-success">Send Message</button>
+                        </form>
+
                         <div id="send-result" class="alert" style="display: none; margin-top: 15px;"></div>
                         <div id="send-spinner" class="spinner"></div>
                     </div>
@@ -1175,9 +1205,100 @@
                 }
             }
 
-            const smsForm = document.getElementById('sms-form');
-            if (smsForm) {
-                smsForm.addEventListener('submit', async function(e) {
+            // SIM Card Selection UI
+            const autoSimBtn = document.getElementById('auto-sim-btn');
+            const specificSimBtn = document.getElementById('specific-sim-btn');
+            const autoSimForm = document.getElementById('auto-sim-form');
+            const specificSimForm = document.getElementById('specific-sim-form');
+            const simCardSelect = document.getElementById('sim-card-select');
+            const specificMessageInput = document.getElementById('specific-message');
+            const specificCharacterCount = document.getElementById('specific-character-count');
+
+            // Load available SIM cards
+            async function loadSimCards() {
+                try {
+                    const data = await apiFetch('/api/sim-cards');
+                    simCardSelect.innerHTML = '<option value="">Select a SIM card...</option>';
+                    data.sim_cards.forEach(sim => {
+                        const option = document.createElement('option');
+                        option.value = sim.id;
+                        option.textContent = `${sim.number} (${sim.status})`;
+                        simCardSelect.appendChild(option);
+                    });
+                } catch (error) {
+                    console.error('Error loading SIM cards:', error);
+                    addNotification('Failed to load SIM cards', 'danger');
+                }
+            }
+
+            // Toggle between auto and specific SIM forms
+            autoSimBtn.addEventListener('click', () => {
+                autoSimBtn.classList.add('active');
+                specificSimBtn.classList.remove('active');
+                autoSimForm.style.display = 'block';
+                specificSimForm.style.display = 'none';
+            });
+
+            specificSimBtn.addEventListener('click', () => {
+                specificSimBtn.classList.add('active');
+                autoSimBtn.classList.remove('active');
+                specificSimForm.style.display = 'block';
+                autoSimForm.style.display = 'none';
+                loadSimCards(); // Load SIM cards when switching to specific SIM mode
+            });
+
+            // Character count update function
+            function updateCharacterCount(inputElement, countElement) {
+                if (!inputElement || !countElement) return;
+                const length = inputElement.value.length;
+                countElement.textContent = `${length}/160 characters`;
+                countElement.style.color = length > 160 ? 'var(--danger)' : 'var(--gray-600)';
+            }
+
+            // Phone number validation function
+            function validatePhoneNumber(input) {
+                // Remove any non-digit characters
+                input.value = input.value.replace(/[^\d+]/g, '');
+                
+                // Ensure it starts with + if not already
+                if (!input.value.startsWith('+')) {
+                    input.value = '+' + input.value;
+                }
+            }
+
+            // Add phone number validation to both recipient inputs
+            const recipientInput = document.getElementById('recipient');
+            const specificRecipientInput = document.getElementById('specific-recipient');
+
+            if (recipientInput) {
+                recipientInput.addEventListener('input', function() {
+                    validatePhoneNumber(this);
+                });
+            }
+
+            if (specificRecipientInput) {
+                specificRecipientInput.addEventListener('input', function() {
+                    validatePhoneNumber(this);
+                });
+            }
+
+            // Update character count for both message inputs
+            const messageInput = document.getElementById('message');
+            if (messageInput) {
+                messageInput.addEventListener('input', function() {
+                    updateCharacterCount(this, characterCountEl);
+                });
+            }
+
+            if (specificMessageInput) {
+                specificMessageInput.addEventListener('input', function() {
+                    updateCharacterCount(this, specificCharacterCount);
+                });
+            }
+
+            // Handle auto SIM form submission
+            if (autoSimForm) {
+                autoSimForm.addEventListener('submit', async function(e) {
                     e.preventDefault();
                     const recipient = document.getElementById('recipient').value;
                     const message = document.getElementById('message').value;
@@ -1199,10 +1320,10 @@
                             method: 'POST',
                             body: JSON.stringify({ recipient, message })
                         });
-                        sendResult.textContent = data.message || 'SMS submitted successfully.';
+                        sendResult.textContent = `SMS sent successfully from ${data.sender_sim}`;
                         sendResult.className = 'alert alert-success';
-                        smsForm.reset();
-                        updateCharacterCount();
+                        autoSimForm.reset();
+                        updateCharacterCount(messageInput, characterCountEl);
                     } catch (error) {
                         sendResult.textContent = `Failed to send SMS: ${error.message}`;
                         sendResult.className = 'alert alert-danger';
@@ -1214,15 +1335,49 @@
                 });
             }
 
-            const messageInput = document.getElementById('message');
-            function updateCharacterCount() {
-                if (!messageInput || !characterCountEl) return;
-                const length = messageInput.value.length;
-                characterCountEl.textContent = `${length}/160 characters`;
-                characterCountEl.style.color = length > 160 ? 'var(--danger)' : 'var(--gray-600)';
-            }
-            if (messageInput) messageInput.addEventListener('input', updateCharacterCount);
+            // Handle specific SIM form submission
+            if (specificSimForm) {
+                specificSimForm.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    const simCardId = simCardSelect.value;
+                    const recipient = document.getElementById('specific-recipient').value;
+                    const message = document.getElementById('specific-message').value;
+                    const sendResult = document.getElementById('send-result');
+                    const sendSpinner = document.getElementById('send-spinner');
 
+                    if (!simCardId || !recipient || !message) {
+                        sendResult.textContent = 'SIM card, recipient, and message are required.';
+                        sendResult.className = 'alert alert-danger';
+                        sendResult.style.display = 'block';
+                        return;
+                    }
+
+                    sendResult.style.display = 'none';
+                    if(sendSpinner) sendSpinner.style.display = 'block';
+
+                    try {
+                        const data = await apiFetch('/api/sms', {
+                            method: 'POST',
+                            body: JSON.stringify({ 
+                                recipient, 
+                                message,
+                                sim_card_id: simCardId
+                            })
+                        });
+                        sendResult.textContent = `SMS sent successfully from ${data.sender_sim}`;
+                        sendResult.className = 'alert alert-success';
+                        specificSimForm.reset();
+                        updateCharacterCount(specificMessageInput, specificCharacterCount);
+                    } catch (error) {
+                        sendResult.textContent = `Failed to send SMS: ${error.message}`;
+                        sendResult.className = 'alert alert-danger';
+                    } finally {
+                        if(sendSpinner) sendSpinner.style.display = 'none';
+                        sendResult.style.display = 'block';
+                        setTimeout(() => { if(sendResult) sendResult.style.display = 'none'; }, 5000);
+                    }
+                });
+            }
 
             function showMessageDetail(message, type) {
                 modalPhone.textContent = type === 'received' ? (message.sender || 'N/A') : (message.recipient || 'N/A');

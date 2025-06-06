@@ -33,6 +33,19 @@ sms_inbox = []
 sms_outbox = []
 logs = []
 
+# Available SIM cards (in production, this would come from your GSM module)
+available_sim_cards = [
+    {"id": "sim1", "number": "+1234567890", "status": "active"},
+    {"id": "sim2", "number": "+0987654321", "status": "active"}
+]
+
+# Helper function to get next available SIM card
+def get_next_available_sim():
+    for sim in available_sim_cards:
+        if sim["status"] == "active":
+            return sim
+    return None
+
 # Helper function to require API key authentication
 def require_api_key(f):
     @wraps(f)
@@ -133,6 +146,14 @@ def auth():
         'role': user.get('role', 'user')
     })
 
+# Get available SIM cards endpoint
+@app.route('/api/sim-cards', methods=['GET'])
+@require_api_key
+def get_sim_cards():
+    return jsonify({
+        'sim_cards': available_sim_cards
+    })
+
 # Send SMS endpoint
 @app.route('/api/sms', methods=['POST'])
 @require_api_key
@@ -142,6 +163,7 @@ def send_sms():
     # Validate input
     recipient = data.get('recipient')
     message = data.get('message')
+    sim_card_id = data.get('sim_card_id')  # Optional: specific SIM card to use
 
     if not recipient or not message:
         return jsonify({'message': 'Recipient and message are required!'}), 400
@@ -151,6 +173,22 @@ def send_sms():
     if not recipient.startswith('+'):
         recipient = '+' + recipient
 
+    # Get sender SIM card
+    sender_sim = None
+    if sim_card_id:
+        # Find the specified SIM card
+        for sim in available_sim_cards:
+            if sim["id"] == sim_card_id:
+                sender_sim = sim
+                break
+        if not sender_sim:
+            return jsonify({'message': 'Invalid SIM card ID!'}), 400
+    else:
+        # Get next available SIM card
+        sender_sim = get_next_available_sim()
+        if not sender_sim:
+            return jsonify({'message': 'No available SIM cards!'}), 400
+
     # Create SMS record
     sms_id = str(uuid.uuid4())
     sms_record = {
@@ -158,12 +196,12 @@ def send_sms():
         'recipient': recipient,
         'message': message,
         'timestamp': time.time(),
-        'status': 'sent'  # In a real system, this would be updated with delivery status
+        'status': 'sent',
+        'sender_sim': sender_sim["number"]  # Add sender SIM number to record
     }
 
     # Store in outbox
     sms_outbox.append(sms_record)
-
 
     # Log the action
     log_entry = {
@@ -172,6 +210,7 @@ def send_sms():
         'action': 'send_sms',
         'sms_id': sms_id,
         'recipient': recipient,
+        'sender_sim': sender_sim["number"],
         'status': 'sent'
     }
     logs.append(log_entry)
@@ -195,7 +234,8 @@ def send_sms():
     return jsonify({
         'message': 'SMS sent successfully',
         'sms_id': sms_id,
-        'timestamp': sms_record['timestamp']
+        'timestamp': sms_record['timestamp'],
+        'sender_sim': sender_sim["number"]
     })
 
 # Get inbox SMS endpoint
