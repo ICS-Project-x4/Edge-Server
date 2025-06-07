@@ -816,33 +816,54 @@
                     <div class="card-header">API Information</div>
                     <div class="card-body">
                         <div class="api-info">
-                            <p><strong>API Base URL:</strong> <code id="api-base-url-display">Loading...</code></p>
-                            <p><strong>Your API Key:</strong> <span id="api-key-display" class="api-key">Loading...</span></p>
+                            <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 10px;">
+                                <p style="margin: 0;"><strong>API Base URL:</strong> <code id="api-base-url-display">Loading...</code></p>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+                                <p style="margin: 0;"><strong>Your API Key:</strong> <span id="api-key-display" class="api-key">Loading...</span></p>
+                                <button id="generate-api-key-btn" class="btn btn-primary" style="min-width: 180px;">Generate API Key</button>
+                            </div>
+                            <div id="generate-api-key-result" class="alert" style="display:none; margin-top:10px;"></div>
                         </div>
                         <h3>API Usage Examples</h3>
-                        <p>Replace <code>YOUR_API_KEY</code> with your actual API key.</p>
+                        <p>Your API key is automatically included in the examples below.</p>
                         <div class="api-examples">
                             <h4>Sending SMS via API</h4>
-                            <pre><code>curl -X POST \
+                            <div style="position: relative;">
+                                <pre><code id="send-sms-example">curl -X POST \
   '[API_BASE_URL]/api/sms' \
   -H 'Content-Type: application/json' \
-  -H 'X-API-Key: YOUR_API_KEY' \
+  -H 'X-API-Key: [API_KEY]' \
   -d '{
     "recipient": "+1234567890",
     "message": "Hello from the API!"
   }'</code></pre>
+                                <button class="btn btn-primary btn-sm" style="position: absolute; top: 10px; right: 10px;" onclick="copyToClipboard('send-sms-example')">Copy</button>
+                            </div>
+
                             <h4>Getting Inbox Messages</h4>
-                            <pre><code>curl -X GET \
+                            <div style="position: relative;">
+                                <pre><code id="inbox-example">curl -X GET \
   '[API_BASE_URL]/api/sms/inbox' \
-  -H 'X-API-Key: YOUR_API_KEY'</code></pre>
+  -H 'X-API-Key: [API_KEY]'</code></pre>
+                                <button class="btn btn-primary btn-sm" style="position: absolute; top: 10px; right: 10px;" onclick="copyToClipboard('inbox-example')">Copy</button>
+                            </div>
+
                             <h4>Getting Outbox Messages</h4>
-                            <pre><code>curl -X GET \
+                            <div style="position: relative;">
+                                <pre><code id="outbox-example">curl -X GET \
   '[API_BASE_URL]/api/sms/outbox' \
-  -H 'X-API-Key: YOUR_API_KEY'</code></pre>
+  -H 'X-API-Key: [API_KEY]'</code></pre>
+                                <button class="btn btn-primary btn-sm" style="position: absolute; top: 10px; right: 10px;" onclick="copyToClipboard('outbox-example')">Copy</button>
+                            </div>
+
                             <h4>Getting System Logs</h4>
-                            <pre><code>curl -X GET \
+                            <div style="position: relative;">
+                                <pre><code id="logs-example">curl -X GET \
   '[API_BASE_URL]/api/logs' \
-  -H 'X-API-Key: YOUR_API_KEY'</code></pre>
+  -H 'X-API-Key: [API_KEY]'</code></pre>
+                                <button class="btn btn-primary btn-sm" style="position: absolute; top: 10px; right: 10px;" onclick="copyToClipboard('logs-example')">Copy</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1012,7 +1033,7 @@
             let API_BASE_URL = '';
 
             try {
-                const response = await fetch('../config.json'); // Assumes config.json is in the same directory
+                const response = await fetch('../config.json');
                 if (!response.ok) {
                     throw new Error(`Failed to load config.json: ${response.status} ${response.statusText}`);
                 }
@@ -1022,6 +1043,19 @@
                     throw new Error('API_BASE_URL not found in config.json');
                 }
                 console.log('Configuration loaded. API_BASE_URL:', API_BASE_URL);
+
+                // Update API examples with actual values
+                const examples = ['send-sms-example', 'inbox-example', 'outbox-example', 'logs-example'];
+                examples.forEach(id => {
+                    const element = document.getElementById(id);
+                    if (element) {
+                        let content = element.textContent;
+                        content = content.replace(/\[API_BASE_URL\]/g, API_BASE_URL);
+                        content = content.replace(/\[API_KEY\]/g, apiKey || 'YOUR_API_KEY');
+                        element.textContent = content;
+                    }
+                });
+
             } catch (error) {
                 console.error('Error loading configuration:', error);
                 document.body.innerHTML = `<div style="padding: 20px; text-align: center; color: red; background-color: #fff0f0; border: 1px solid red; margin: 20px;">
@@ -1031,7 +1065,7 @@
                                                <p>Example: <code>{ "API_BASE_URL": "http://localhost:3000" }</code></p>
                                                <p><strong>Error details:</strong> ${error.message}</p>
                                            </div>`;
-                return; 
+                return;
             }
 
             const socket = io(API_BASE_URL, {
@@ -1095,6 +1129,10 @@
                         'Content-Type': 'application/json'
                     }
                 };
+                // Add JWT token for endpoints that require it
+                if (endpoint === '/api/generate-api-key' && token) {
+                    defaultOptions.headers['Authorization'] = 'Bearer ' + token;
+                }
                 const mergedOptions = { ...defaultOptions, ...options };
                 mergedOptions.headers = { ...defaultOptions.headers, ...options.headers };
 
@@ -1321,72 +1359,28 @@
             const specificMessageInput = document.getElementById('specific-message');
             const specificCharacterCount = document.getElementById('specific-character-count');
 
-            // Load available SIM cards
-            async function loadSimCards() {
-                const spinner = document.getElementById('sim-spinner');
-                const tableBody = document.getElementById('sim-table-body');
-                
-                if(spinner) spinner.style.display = 'block';
+            // Load SIM cards into the dropdown for the specific SIM form
+            async function loadSimCardsDropdown() {
+                const simCardSelect = document.getElementById('sim-card-select');
+                if (!simCardSelect) return;
+                simCardSelect.innerHTML = '<option value="">Loading SIM cards...</option>';
                 try {
                     const data = await apiFetch('/api/sim-cards');
                     if (!data.sim_cards || data.sim_cards.length === 0) {
-                        tableBody.innerHTML = '<tr><td colspan="4" class="text-center">No SIM cards available</td></tr>';
+                        simCardSelect.innerHTML = '<option value="">No SIM cards available</option>';
                         return;
                     }
-                    
-                    tableBody.innerHTML = data.sim_cards.map(sim => {
-                        const statusBadge = sim.status === 'active' 
-                            ? '<span class="badge badge-success">Active</span>'
-                            : '<span class="badge badge-secondary">Inactive</span>';
-                        
-                        return `
-                            <tr>
-                                <td>${sim.id}</td>
-                                <td>${sim.number}</td>
-                                <td>${statusBadge}</td>
-                                <td>
-                                    <button class="btn btn-primary btn-sm edit-sim-btn" data-sim-id="${sim.id}">Edit</button>
-                                    <button class="btn btn-danger btn-sm delete-sim-btn" data-sim-id="${sim.id}">Delete</button>
-                                </td>
-                            </tr>
-                        `;
-                    }).join('');
-
-                    // Add event listeners to buttons
-                    document.querySelectorAll('.edit-sim-btn').forEach(btn => {
-                        btn.addEventListener('click', () => {
-                            const simId = btn.getAttribute('data-sim-id');
-                            const sim = data.sim_cards.find(s => s.id === simId);
-                            if (sim) {
-                                document.getElementById('edit-sim-id').value = sim.id;
-                                document.getElementById('edit-sim-number').value = sim.number;
-                                document.getElementById('edit-sim-status').value = sim.status;
-                                editSimModal.classList.add('show');
-                            }
-                        });
-                    });
-
-                    document.querySelectorAll('.delete-sim-btn').forEach(btn => {
-                        btn.addEventListener('click', async () => {
-                            if (confirm('Are you sure you want to delete this SIM card?')) {
-                                const simId = btn.getAttribute('data-sim-id');
-                                try {
-                                    await apiFetch(`/api/sim-cards/${simId}`, {
-                                        method: 'DELETE'
-                                    });
-                                    loadSimCards();
-                                    addNotification('SIM card deleted successfully', 'success');
-                                } catch (error) {
-                                    addNotification(`Failed to delete SIM card: ${error.message}`, 'danger');
-                                }
-                            }
-                        });
+                    simCardSelect.innerHTML = '<option value="">Select a SIM card</option>';
+                    data.sim_cards.forEach(sim => {
+                        if (sim.status === 'active') {
+                            const option = document.createElement('option');
+                            option.value = sim.id;
+                            option.textContent = `${sim.number} (${sim.id})`;
+                            simCardSelect.appendChild(option);
+                        }
                     });
                 } catch (error) {
-                    tableBody.innerHTML = '<tr><td colspan="4" class="text-center">Error loading SIM cards</td></tr>';
-                    addNotification(`Failed to load SIM cards: ${error.message}`, 'danger');
-                } finally {
-                    if(spinner) spinner.style.display = 'none';
+                    simCardSelect.innerHTML = '<option value="">Error loading SIM cards</option>';
                 }
             }
 
@@ -1403,7 +1397,7 @@
                 autoSimBtn.classList.remove('active');
                 specificSimForm.style.display = 'block';
                 autoSimForm.style.display = 'none';
-                loadSimCards(); // Load SIM cards when switching to specific SIM mode
+                loadSimCardsDropdown(); // Load SIM cards into dropdown
             });
 
             // Character count update function
@@ -1841,6 +1835,70 @@
             document.querySelector('a[data-tab="sim-management-tab"]').addEventListener('click', () => {
                 loadSimCards();
             });
+
+            // Add JS handler for Generate API Key
+            const generateApiKeyBtn = document.getElementById('generate-api-key-btn');
+            const generateApiKeyResult = document.getElementById('generate-api-key-result');
+            if (generateApiKeyBtn) {
+                generateApiKeyBtn.addEventListener('click', async () => {
+                    generateApiKeyBtn.disabled = true;
+                    generateApiKeyResult.style.display = 'none';
+                    try {
+                        const data = await apiFetch('/api/generate-api-key', { method: 'POST' });
+                        document.getElementById('api-key-display').textContent = data.api_key;
+                        document.getElementById('account-api-key').textContent = data.api_key;
+                        localStorage.setItem('sms_gateway_api_key', data.api_key);
+                        generateApiKeyResult.textContent = 'API key generated successfully!';
+                        generateApiKeyResult.className = 'alert alert-success';
+                        // Update API examples with new key
+                        updateApiExamples();
+                    } catch (error) {
+                        generateApiKeyResult.textContent = 'Failed to generate API key: ' + error.message;
+                        generateApiKeyResult.className = 'alert alert-danger';
+                    } finally {
+                        generateApiKeyResult.style.display = 'block';
+                        generateApiKeyBtn.disabled = false;
+                    }
+                });
+            }
+
+            // Add copy to clipboard function
+            function copyToClipboard(elementId) {
+                const element = document.getElementById(elementId);
+                const text = element.textContent;
+                navigator.clipboard.writeText(text).then(() => {
+                    const button = element.parentElement.querySelector('button');
+                    const originalText = button.textContent;
+                    button.textContent = 'Copied!';
+                    button.classList.add('btn-success');
+                    button.classList.remove('btn-primary');
+                    setTimeout(() => {
+                        button.textContent = originalText;
+                        button.classList.add('btn-primary');
+                        button.classList.remove('btn-success');
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Failed to copy text: ', err);
+                });
+            }
+
+            // Add function to update API examples
+            function updateApiExamples() {
+                const examples = ['send-sms-example', 'inbox-example', 'outbox-example', 'logs-example'];
+                const currentApiKey = localStorage.getItem('sms_gateway_api_key');
+                examples.forEach(id => {
+                    const element = document.getElementById(id);
+                    if (element) {
+                        let content = element.textContent;
+                        content = content.replace(/\[API_BASE_URL\]/g, API_BASE_URL);
+                        content = content.replace(/X-API-Key: .*/, `X-API-Key: ${currentApiKey || 'YOUR_API_KEY'}`);
+                        element.textContent = content;
+                    }
+                });
+            }
+
+            // Initial update of API examples
+            updateApiExamples();
         });
     </script>
 </body>

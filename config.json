@@ -1,3 +1,21 @@
 {
-  "API_BASE_URL":"http://localhost:5001"
+  "API_BASE_URL": "http://localhost:5001",
+  "MQTT": {
+    "host": "localhost",
+    "port": 1883,
+    "topics": {
+      "send_prefix": "sms/send/"
+    }
+  },
+  "SMS": {
+    "max_length": 160
+  },
+  "Security": {
+    "api_key_length": 32,
+    "token_expiry": 86400,
+    "password_min_length": 6
+  },
+  "Logging": {
+    "max_logs": 1000
+  }
 }

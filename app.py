@@ -10,6 +10,7 @@ from flask_socketio import SocketIO
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import paho.mqtt.publish as publish
+import secrets
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
@@ -151,7 +152,8 @@ def auth():
 @require_api_key
 def get_sim_cards():
     return jsonify({
-        'sim_cards': available_sim_cards
+        'sim_cards': available_sim_cards,
+        'count': len(available_sim_cards)
     })
 
 @app.route('/api/sim-cards', methods=['POST'])
@@ -160,13 +162,17 @@ def add_sim_card():
     data = request.get_json()
     
     # Validate input
-    if not data.get('number'):
-        return jsonify({'message': 'SIM card number is required!'}), 400
+    if not data or not data.get('number') or not data['number'].strip():
+        return jsonify({'message': 'SIM card number is required and cannot be empty!'}), 400
     
     # Process phone number format
     number = data['number'].strip().replace(' ', '')
     if not number.startswith('+'):
         number = '+' + number
+    
+    # Check if number contains actual digits after +
+    if len(number) <= 1 or not number[1:].isdigit():
+        return jsonify({'message': 'SIM card number must contain digits after + sign!'}), 400
     
     # Generate unique ID
     sim_id = f"sim{len(available_sim_cards) + 1}"
@@ -214,9 +220,14 @@ def update_sim_card(sim_id):
     
     # Update fields
     if 'number' in data:
+        if not data['number'] or not data['number'].strip():
+            return jsonify({'message': 'SIM card number cannot be empty!'}), 400
         number = data['number'].strip().replace(' ', '')
         if not number.startswith('+'):
             number = '+' + number
+        # Check if number contains actual digits after +
+        if len(number) <= 1 or not number[1:].isdigit():
+            return jsonify({'message': 'SIM card number must contain digits after + sign!'}), 400
         sim_card['number'] = number
     
     if 'status' in data:
@@ -280,13 +291,19 @@ def send_sms():
     message = data.get('message')
     sim_card_id = data.get('sim_card_id')  # Optional: specific SIM card to use
 
-    if not recipient or not message:
-        return jsonify({'message': 'Recipient and message are required!'}), 400
+    if not recipient or not recipient.strip():
+        return jsonify({'message': 'Recipient number is required and cannot be empty!'}), 400
+    if not message or not message.strip():
+        return jsonify({'message': 'Message content is required and cannot be empty!'}), 400
 
     # Process phone number format
     recipient = recipient.strip().replace(' ', '')
     if not recipient.startswith('+'):
         recipient = '+' + recipient
+    
+    # Check if number contains actual digits after +
+    if len(recipient) <= 1 or not recipient[1:].isdigit():
+        return jsonify({'message': 'Recipient number must contain digits after + sign!'}), 400
 
     # Get sender SIM card
     sender_sim = None
@@ -309,7 +326,7 @@ def send_sms():
     sms_record = {
         'id': sms_id,
         'recipient': recipient,
-        'message': message,
+        'message': message.strip(),
         'timestamp': time.time(),
         'status': 'sent',
         'sender_sim': sender_sim["number"]  # Add sender SIM number to record
@@ -452,6 +469,14 @@ def setup():
 def create_template_files():
     # This function would create template files in a real setup
     pass
+
+@app.route('/api/generate-api-key', methods=['POST'])
+@token_required
+def generate_api_key(current_user):
+    # Generate a new API key
+    new_api_key = secrets.token_hex(16)
+    current_user['api_key'] = new_api_key
+    return jsonify({'api_key': new_api_key, 'message': 'API key generated successfully'})
 
 # Run the application
 if __name__ == '__main__':
