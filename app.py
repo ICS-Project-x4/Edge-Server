@@ -9,12 +9,48 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
+import paho.mqtt.client as mqtt
 import paho.mqtt.publish as publish
 import secrets
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
+
+# MQTT Client setup
+mqtt_client = mqtt.Client()
+
+def on_connect(client, userdata, flags, rc):
+    print("Connected to MQTT broker with result code: " + str(rc))
+    # Subscribe to the sms/status topic
+    client.subscribe("sms/status")
+    print("Subscribed to topic: sms/status")
+
+def on_message(client, userdata, msg):
+    try:
+        # Parse the message payload
+        payload = msg.payload.decode()
+        print(f"Received MQTT message on topic {msg.topic}: {payload}")
+        
+        # Forward the message to all connected Socket.io clients
+        print("Forwarding message to Socket.io clients...")
+        socketio.emit('mqtt_status', payload)
+        print("Message forwarded successfully")
+    except Exception as e:
+        print(f"Error processing MQTT message: {str(e)}")
+
+# Set up MQTT client callbacks
+mqtt_client.on_connect = on_connect
+mqtt_client.on_message = on_message
+
+# Connect to MQTT broker
+try:
+    print("Attempting to connect to MQTT broker...")
+    mqtt_client.connect("localhost", 1883, 60)
+    mqtt_client.loop_start()
+    print("MQTT client started successfully")
+except Exception as e:
+    print(f"Failed to connect to MQTT broker: {str(e)}")
 
 # Secret key for JWT token
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_secret_key')

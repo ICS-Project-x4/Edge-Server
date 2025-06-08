@@ -758,7 +758,7 @@
                     </div>
                     <div class="card-body">
                         <div id="logs-spinner" class="spinner"></div>
-                        <div style="overflow-x: auto;"> <!-- Make table horizontally scrollable on small screens -->
+                        <div style="overflow-x: auto;">
                             <table class="table">
                                 <thead>
                                     <tr>
@@ -772,6 +772,35 @@
                                 <tbody id="logs-table-body">
                                     <tr>
                                         <td colspan="5" class="text-center">Loading logs...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MQTT Status Messages Card -->
+                <div class="card" style="margin-top: 20px;">
+                    <div class="card-header">
+                        <span>SIMs Status Messages</span>
+                        <button id="refresh-mqtt" class="btn btn-primary btn-sm">Refresh</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="mqtt-spinner" class="spinner"></div>
+                        <div style="overflow-x: auto;">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Sender</th>
+                                        <th>Receiver</th>
+                                        <th>Message</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mqtt-table-body">
+                                    <tr>
+                                        <td colspan="5" class="text-center">Waiting for MQTT messages...</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -1609,9 +1638,26 @@
             }
             document.getElementById('logout-btn').addEventListener('click', logout);
 
-            socket.on('connect', () => { isSocketConnected = true; updateConnectionStatus(); addNotification('Real-time connection established.', 'success');});
-            socket.on('disconnect', (reason) => { isSocketConnected = false; updateConnectionStatus(); addNotification(`Real-time connection lost: ${reason}`, 'warning');});
-            socket.on('connect_error', (err) => {isSocketConnected = false; updateConnectionStatus(); addNotification(`Socket Connection Error: ${err.message}`, 'danger'); console.error("Socket connect_error:", err);});
+            socket.on('connect', () => { 
+                isSocketConnected = true; 
+                updateConnectionStatus(); 
+                addNotification('Real-time connection established.', 'success');
+                console.log('Socket.io connected successfully');
+            });
+
+            socket.on('disconnect', (reason) => { 
+                isSocketConnected = false; 
+                updateConnectionStatus(); 
+                addNotification(`Real-time connection lost: ${reason}`, 'warning');
+                console.log('Socket.io disconnected:', reason);
+            });
+
+            socket.on('connect_error', (err) => {
+                isSocketConnected = false; 
+                updateConnectionStatus(); 
+                addNotification(`Socket Connection Error: ${err.message}`, 'danger'); 
+                console.error("Socket connect_error:", err);
+            });
 
             socket.on('new_sms_received', (data) => {
                 console.log('Socket event: new_sms_received', data);
@@ -1640,6 +1686,67 @@
 
                 if (document.getElementById('logs-tab').classList.contains('active')) fetchLogs();
                 fetchDashboardData();
+            });
+
+            socket.on('mqtt_status', (data) => {
+                console.log('MQTT status message received in frontend:', data);
+                try {
+                    // If data is a string, try to parse it
+                    const messageData = typeof data === 'string' ? JSON.parse(data) : data;
+                    console.log('Parsed MQTT message:', messageData);
+                    updateMQTTStatusTable(messageData);
+                } catch (error) {
+                    console.error('Error processing MQTT message:', error);
+                    console.log('Raw MQTT message:', data);
+                }
+            });
+
+            function updateMQTTStatusTable(data) {
+                console.log('Updating MQTT status table with:', data);
+                const tableBody = document.getElementById('mqtt-table-body');
+                if (!tableBody) {
+                    console.error('MQTT table body not found!');
+                    return;
+                }
+
+                const row = document.createElement('tr');
+                const timestamp = new Date().toLocaleString();
+                
+                row.innerHTML = `
+                    <td>${timestamp}</td>
+                    <td>${data.sender_number || 'N/A'}</td>
+                    <td>${data.receiver_number || 'N/A'}</td>
+                    <td>${data.message || 'N/A'}</td>
+                    <td><span class="badge badge-${getStatusBadgeClass(data.status)}">${data.status || 'N/A'}</span></td>
+                `;
+
+                // Add the new row at the top of the table
+                tableBody.insertBefore(row, tableBody.firstChild);
+                console.log('New row added to MQTT table');
+
+                // Keep only the last 50 messages
+                while (tableBody.children.length > 50) {
+                    tableBody.removeChild(tableBody.lastChild);
+                }
+            }
+
+            function getStatusBadgeClass(status) {
+                if (!status) return 'secondary';
+                status = status.toLowerCase();
+                if (['success', 'sent', 'delivered'].includes(status)) return 'success';
+                if (['failed', 'error'].includes(status)) return 'danger';
+                if (['pending', 'queued'].includes(status)) return 'warning';
+                return 'info';
+            }
+
+            // Add refresh button handler
+            document.getElementById('refresh-mqtt').addEventListener('click', () => {
+                const spinner = document.getElementById('mqtt-spinner');
+                if (spinner) spinner.style.display = 'block';
+                // You might want to fetch historical MQTT messages here if available
+                setTimeout(() => {
+                    if (spinner) spinner.style.display = 'none';
+                }, 1000);
             });
 
             function updateConnectionStatus() {
