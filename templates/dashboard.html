@@ -1098,8 +1098,13 @@
             }
 
             const socket = io(API_BASE_URL, {
-                // transports: ['websocket'], // Optional: force websocket if polling issues
-                // auth: { token: token } // If your socket server uses token auth for connection
+                transports: ['websocket', 'polling'],
+                reconnection: true,
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                timeout: 20000,
+                autoConnect: true
             });
             let isSocketConnected = false;
 
@@ -1482,8 +1487,8 @@
             if (autoSimForm) {
                 autoSimForm.addEventListener('submit', async function(e) {
                     e.preventDefault();
-                    const recipient = document.getElementById('recipient').value;
-                    const message = document.getElementById('message').value;
+                    const recipient = document.getElementById('recipient').value.trim();
+                    const message = document.getElementById('message').value.trim();
                     const sendResult = document.getElementById('send-result');
                     const sendSpinner = document.getElementById('send-spinner');
 
@@ -1494,19 +1499,42 @@
                         return;
                     }
 
+                    // Ensure phone number starts with +
+                    if (!recipient.startsWith('+')) {
+                        sendResult.textContent = 'Phone number must start with + and include country code.';
+                        sendResult.className = 'alert alert-danger';
+                        sendResult.style.display = 'block';
+                        return;
+                    }
+
                     sendResult.style.display = 'none';
                     if(sendSpinner) sendSpinner.style.display = 'block';
 
                     try {
-                        const data = await apiFetch('/api/sms', {
+                        const response = await fetch(`${API_BASE_URL}/api/sms`, {
                             method: 'POST',
-                            body: JSON.stringify({ recipient, message })
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-API-Key': apiKey
+                            },
+                            body: JSON.stringify({
+                                recipient: recipient,
+                                message: message
+                            })
                         });
-                        sendResult.textContent = `SMS sent successfully from ${data.sender_sim}`;
+
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            throw new Error(errorData.error || 'Failed to send SMS');
+                        }
+
+                        const data = await response.json();
+                        sendResult.textContent = `SMS queued for sending from ${data.sender_sim}`;
                         sendResult.className = 'alert alert-success';
                         autoSimForm.reset();
                         updateCharacterCount(messageInput, characterCountEl);
                     } catch (error) {
+                        console.error('Send SMS error:', error);
                         sendResult.textContent = `Failed to send SMS: ${error.message}`;
                         sendResult.className = 'alert alert-danger';
                     } finally {
@@ -1522,8 +1550,8 @@
                 specificSimForm.addEventListener('submit', async function(e) {
                     e.preventDefault();
                     const simCardId = simCardSelect.value;
-                    const recipient = document.getElementById('specific-recipient').value;
-                    const message = document.getElementById('specific-message').value;
+                    const recipient = document.getElementById('specific-recipient').value.trim();
+                    const message = document.getElementById('specific-message').value.trim();
                     const sendResult = document.getElementById('send-result');
                     const sendSpinner = document.getElementById('send-spinner');
 
@@ -1534,23 +1562,43 @@
                         return;
                     }
 
+                    // Ensure phone number starts with +
+                    if (!recipient.startsWith('+')) {
+                        sendResult.textContent = 'Phone number must start with + and include country code.';
+                        sendResult.className = 'alert alert-danger';
+                        sendResult.style.display = 'block';
+                        return;
+                    }
+
                     sendResult.style.display = 'none';
                     if(sendSpinner) sendSpinner.style.display = 'block';
 
                     try {
-                        const data = await apiFetch('/api/sms', {
+                        const response = await fetch(`${API_BASE_URL}/api/sms`, {
                             method: 'POST',
-                            body: JSON.stringify({ 
-                                recipient, 
-                                message,
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-API-Key': apiKey
+                            },
+                            body: JSON.stringify({
+                                recipient: recipient,
+                                message: message,
                                 sim_card_id: simCardId
                             })
                         });
-                        sendResult.textContent = `SMS sent successfully from ${data.sender_sim}`;
+
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            throw new Error(errorData.error || 'Failed to send SMS');
+                        }
+
+                        const data = await response.json();
+                        sendResult.textContent = `SMS queued for sending from ${data.sender_sim}`;
                         sendResult.className = 'alert alert-success';
                         specificSimForm.reset();
                         updateCharacterCount(specificMessageInput, specificCharacterCount);
                     } catch (error) {
+                        console.error('Send SMS error:', error);
                         sendResult.textContent = `Failed to send SMS: ${error.message}`;
                         sendResult.className = 'alert alert-danger';
                     } finally {
@@ -1653,10 +1701,39 @@
             });
 
             socket.on('connect_error', (err) => {
-                isSocketConnected = false; 
-                updateConnectionStatus(); 
-                addNotification(`Socket Connection Error: ${err.message}`, 'danger'); 
                 console.error("Socket connect_error:", err);
+                isSocketConnected = false;
+                updateConnectionStatus();
+                addNotification(`Socket Connection Error: ${err.message}`, 'danger');
+            });
+
+            socket.on('connect_timeout', () => {
+                console.error("Socket connection timeout");
+                isSocketConnected = false;
+                updateConnectionStatus();
+                addNotification('Socket connection timeout', 'danger');
+            });
+
+            socket.on('reconnect_attempt', (attemptNumber) => {
+                console.log(`Attempting to reconnect (${attemptNumber})...`);
+                addNotification(`Attempting to reconnect (${attemptNumber})...`, 'warning');
+            });
+
+            socket.on('reconnect', (attemptNumber) => {
+                console.log(`Reconnected after ${attemptNumber} attempts`);
+                isSocketConnected = true;
+                updateConnectionStatus();
+                addNotification('Reconnected successfully', 'success');
+            });
+
+            socket.on('reconnect_error', (err) => {
+                console.error("Reconnection error:", err);
+                addNotification(`Reconnection error: ${err.message}`, 'danger');
+            });
+
+            socket.on('reconnect_failed', () => {
+                console.error("Failed to reconnect");
+                addNotification('Failed to reconnect after multiple attempts', 'danger');
             });
 
             socket.on('new_sms_received', (data) => {

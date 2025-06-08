@@ -12,38 +12,59 @@ from functools import wraps
 import paho.mqtt.client as mqtt
 import paho.mqtt.publish as publish
 import secrets
+from database import db, User, SimCard, Message, Log, init_db
+
+# Import eventlet and monkey patch
+import eventlet
+eventlet.monkey_patch()
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
-CORS(app)
-socketio = SocketIO(app, cors_allowed_origins="*")
+CORS(app, resources={r"/*": {"origins": "*"}})
+
+# Configure Socket.io with CORS
+socketio = SocketIO(app, 
+    cors_allowed_origins="*",
+    async_mode='eventlet',
+    ping_timeout=60,
+    ping_interval=25,
+    max_http_buffer_size=1e8
+)
+
+# Configure SQLite database
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sms_gateway.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': 300,
+    'pool_use_lifo': True
+}
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+
+# Initialize database
+db.init_app(app)
+init_db(app)
 
 # MQTT Client setup
 mqtt_client = mqtt.Client()
 
 def on_connect(client, userdata, flags, rc):
     print("Connected to MQTT broker with result code: " + str(rc))
-    # Subscribe to the sms/status topic
     client.subscribe("sms/status")
     print("Subscribed to topic: sms/status")
 
 def on_message(client, userdata, msg):
     try:
-        # Parse the message payload
         payload = msg.payload.decode()
         print(f"Received MQTT message on topic {msg.topic}: {payload}")
-        
-        # Forward the message to all connected Socket.io clients
         print("Forwarding message to Socket.io clients...")
         socketio.emit('mqtt_status', payload)
         print("Message forwarded successfully")
     except Exception as e:
         print(f"Error processing MQTT message: {str(e)}")
 
-# Set up MQTT client callbacks
 mqtt_client.on_connect = on_connect
 mqtt_client.on_message = on_message
 
-# Connect to MQTT broker
 try:
     print("Attempting to connect to MQTT broker...")
     mqtt_client.connect("localhost", 1883, 60)
@@ -52,92 +73,42 @@ try:
 except Exception as e:
     print(f"Failed to connect to MQTT broker: {str(e)}")
 
-# Secret key for JWT token
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_secret_key')
-
-# Simulated database (in production, use a real database)
-users = {
-    "admin": {
-        "username": "admin",
-        "password": generate_password_hash("admin123"),
-        "api_key": "test_api_key_123456",
-        "role": "admin"
-    }
-}
-
-# In-memory storage for SMS messages (replace with a database in production)
-sms_inbox = []
-sms_outbox = []
-logs = []
-
-# Available SIM cards (in production, this would come from your GSM module)
-available_sim_cards = [
-    {"id": "sim1", "number": "+1234567890", "status": "active"},
-    {"id": "sim2", "number": "+0987654321", "status": "active"}
-]
-
-# Helper function to get next available SIM card
 def get_next_available_sim():
-    for sim in available_sim_cards:
-        if sim["status"] == "active":
-            return sim
-    return None
+    return SimCard.query.filter_by(status='active').first()
 
-# Helper function to require API key authentication
 def require_api_key(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         api_key = request.headers.get('X-API-Key')
-
         if not api_key:
-            api_key = request.args.get('api_key')
-
-        if not api_key:
-            data = request.get_json()
-            if data and 'api_key' in data:
-                api_key = data['api_key']
-
-        if not api_key:
-            return jsonify({'message': 'API key is missing!'}), 401
-
-        valid_user = None
-        for user in users.values():
-            if user.get('api_key') == api_key:
-                valid_user = user
-                break
-
-        if not valid_user:
-            return jsonify({'message': 'Invalid API key!'}), 401
-
+            return jsonify({'message': 'API key is missing'}), 401
+        
+        user = User.query.filter_by(api_key=api_key).first()
+        if not user:
+            return jsonify({'message': 'Invalid API key'}), 401
+        
         return f(*args, **kwargs)
     return decorated
 
-# Helper function to require JWT token for protected routes
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        token = None
-
-        if 'Authorization' in request.headers:
-            auth_header = request.headers['Authorization']
-            if auth_header.startswith('Bearer '):
-                token = auth_header[7:]
-
+        token = request.headers.get('Authorization')
         if not token:
-            return jsonify({'message': 'Token is missing!'}), 401
-
+            return jsonify({'message': 'Token is missing'}), 401
+        
         try:
+            token = token.split(' ')[1]  # Remove 'Bearer ' prefix
             data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
-            current_user = users.get(data['username'])
+            current_user = User.query.get(data['user_id'])
             if not current_user:
-                return jsonify({'message': 'Invalid token!'}), 401
+                return jsonify({'message': 'User not found'}), 401
         except:
-            return jsonify({'message': 'Invalid token!'}), 401
-
+            return jsonify({'message': 'Token is invalid'}), 401
+        
         return f(current_user, *args, **kwargs)
     return decorated
 
-# Serve the main page
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -146,374 +117,306 @@ def index():
 def dashboard():
     return render_template('dashboard.html')
 
-# Authentication endpoint
 @app.route('/api/auth', methods=['POST'])
 def auth():
     data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-
-    if not username or not password:
-        return jsonify({'message': 'Username and password are required!'}), 400
-
-    user = users.get(username)
-    if not user or not check_password_hash(user['password'], password):
-        return jsonify({'message': 'Invalid credentials!'}), 401
-
-    # Generate JWT token
+    if not data or not data.get('username') or not data.get('password'):
+        return jsonify({'message': 'Missing username or password'}), 400
+    
+    user = User.query.filter_by(username=data['username']).first()
+    if not user or not check_password_hash(user.password_hash, data['password']):
+        return jsonify({'message': 'Invalid username or password'}), 401
+    
     token = jwt.encode({
-        'username': username,
+        'user_id': user.id,
         'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
-    }, app.config['SECRET_KEY'], algorithm="HS256")
-
-    # Log authentication
-    log_entry = {
-        'id': str(uuid.uuid4()),
-        'timestamp': time.time(),
-        'action': 'authentication',
-        'username': username,
-        'status': 'success'
-    }
-    logs.append(log_entry)
-
+    }, app.config['SECRET_KEY'])
+    
     return jsonify({
         'token': token,
-        'api_key': user['api_key'],
-        'username': user['username'],
-        'role': user.get('role', 'user')
+        'username': user.username,
+        'role': user.role,
+        'api_key': user.api_key
     })
 
-# SIM Card Management Endpoints
 @app.route('/api/sim-cards', methods=['GET'])
 @require_api_key
 def get_sim_cards():
+    sim_cards = SimCard.query.all()
     return jsonify({
-        'sim_cards': available_sim_cards,
-        'count': len(available_sim_cards)
+        'sim_cards': [{
+            'id': sim.id,
+            'number': sim.number,
+            'status': sim.status
+        } for sim in sim_cards]
     })
 
 @app.route('/api/sim-cards', methods=['POST'])
 @require_api_key
 def add_sim_card():
     data = request.get_json()
+    if not data or not data.get('number'):
+        return jsonify({'message': 'Phone number is required'}), 400
     
-    # Validate input
-    if not data or not data.get('number') or not data['number'].strip():
-        return jsonify({'message': 'SIM card number is required and cannot be empty!'}), 400
-    
-    # Process phone number format
-    number = data['number'].strip().replace(' ', '')
-    if not number.startswith('+'):
-        number = '+' + number
-    
-    # Check if number contains actual digits after +
-    if len(number) <= 1 or not number[1:].isdigit():
-        return jsonify({'message': 'SIM card number must contain digits after + sign!'}), 400
-    
-    # Generate unique ID
-    sim_id = f"sim{len(available_sim_cards) + 1}"
-    
-    # Create new SIM card
-    new_sim = {
-        'id': sim_id,
-        'number': number,
-        'status': data.get('status', 'active')
-    }
-    
-    # Add to list
-    available_sim_cards.append(new_sim)
-    
-    # Log the action
-    log_entry = {
-        'id': str(uuid.uuid4()),
-        'timestamp': time.time(),
-        'action': 'add_sim_card',
-        'sim_id': sim_id,
-        'number': number,
-        'status': 'success'
-    }
-    logs.append(log_entry)
-    
-    return jsonify({
-        'message': 'SIM card added successfully',
-        'sim_card': new_sim
-    })
+    try:
+        sim_card = SimCard(
+            number=data['number'],
+            status=data.get('status', 'active')
+        )
+        db.session.add(sim_card)
+        db.session.commit()
+        
+        log = Log(
+            action='add_sim_card',
+            details=json.dumps({'number': data['number'], 'status': data.get('status', 'active')}),
+            status='success'
+        )
+        db.session.add(log)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'SIM card added successfully',
+            'sim_card': {
+                'id': sim_card.id,
+                'number': sim_card.number,
+                'status': sim_card.status
+            }
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': str(e)}), 500
 
 @app.route('/api/sim-cards/<sim_id>', methods=['PUT'])
 @require_api_key
 def update_sim_card(sim_id):
     data = request.get_json()
+    if not data:
+        return jsonify({'message': 'No data provided'}), 400
     
-    # Find the SIM card
-    sim_card = None
-    for sim in available_sim_cards:
-        if sim['id'] == sim_id:
-            sim_card = sim
-            break
-    
+    sim_card = SimCard.query.get(sim_id)
     if not sim_card:
-        return jsonify({'message': 'SIM card not found!'}), 404
+        return jsonify({'message': 'SIM card not found'}), 404
     
-    # Update fields
-    if 'number' in data:
-        if not data['number'] or not data['number'].strip():
-            return jsonify({'message': 'SIM card number cannot be empty!'}), 400
-        number = data['number'].strip().replace(' ', '')
-        if not number.startswith('+'):
-            number = '+' + number
-        # Check if number contains actual digits after +
-        if len(number) <= 1 or not number[1:].isdigit():
-            return jsonify({'message': 'SIM card number must contain digits after + sign!'}), 400
-        sim_card['number'] = number
-    
-    if 'status' in data:
-        sim_card['status'] = data['status']
-    
-    # Log the action
-    log_entry = {
-        'id': str(uuid.uuid4()),
-        'timestamp': time.time(),
-        'action': 'update_sim_card',
-        'sim_id': sim_id,
-        'number': sim_card['number'],
-        'status': 'success'
-    }
-    logs.append(log_entry)
-    
-    return jsonify({
-        'message': 'SIM card updated successfully',
-        'sim_card': sim_card
-    })
+    try:
+        if 'number' in data:
+            sim_card.number = data['number']
+        if 'status' in data:
+            sim_card.status = data['status']
+        
+        db.session.commit()
+        
+        log = Log(
+            action='update_sim_card',
+            details=json.dumps({'sim_id': sim_id, 'updates': data}),
+            status='success'
+        )
+        db.session.add(log)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'SIM card updated successfully',
+            'sim_card': {
+                'id': sim_card.id,
+                'number': sim_card.number,
+                'status': sim_card.status
+            }
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': str(e)}), 500
 
 @app.route('/api/sim-cards/<sim_id>', methods=['DELETE'])
 @require_api_key
 def delete_sim_card(sim_id):
-    # Find the SIM card
-    sim_card = None
-    for sim in available_sim_cards:
-        if sim['id'] == sim_id:
-            sim_card = sim
-            break
-    
+    sim_card = SimCard.query.get(sim_id)
     if not sim_card:
-        return jsonify({'message': 'SIM card not found!'}), 404
+        return jsonify({'message': 'SIM card not found'}), 404
     
-    # Remove from list
-    available_sim_cards.remove(sim_card)
-    
-    # Log the action
-    log_entry = {
-        'id': str(uuid.uuid4()),
-        'timestamp': time.time(),
-        'action': 'delete_sim_card',
-        'sim_id': sim_id,
-        'number': sim_card['number'],
-        'status': 'success'
-    }
-    logs.append(log_entry)
-    
-    return jsonify({
-        'message': 'SIM card deleted successfully'
-    })
+    try:
+        db.session.delete(sim_card)
+        db.session.commit()
+        
+        log = Log(
+            action='delete_sim_card',
+            details=json.dumps({'sim_id': sim_id}),
+            status='success'
+        )
+        db.session.add(log)
+        db.session.commit()
+        
+        return jsonify({'message': 'SIM card deleted successfully'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': str(e)}), 500
 
-# Send SMS endpoint
 @app.route('/api/sms', methods=['POST'])
 @require_api_key
 def send_sms():
-    data = request.get_json()
-
-    # Validate input
-    recipient = data.get('recipient')
-    message = data.get('message')
-    sim_card_id = data.get('sim_card_id')  # Optional: specific SIM card to use
-
-    if not recipient or not recipient.strip():
-        return jsonify({'message': 'Recipient number is required and cannot be empty!'}), 400
-    if not message or not message.strip():
-        return jsonify({'message': 'Message content is required and cannot be empty!'}), 400
-
-    # Process phone number format
-    recipient = recipient.strip().replace(' ', '')
-    if not recipient.startswith('+'):
-        recipient = '+' + recipient
-    
-    # Check if number contains actual digits after +
-    if len(recipient) <= 1 or not recipient[1:].isdigit():
-        return jsonify({'message': 'Recipient number must contain digits after + sign!'}), 400
-
-    # Get sender SIM card
-    sender_sim = None
-    if sim_card_id:
-        # Find the specified SIM card
-        for sim in available_sim_cards:
-            if sim["id"] == sim_card_id:
-                sender_sim = sim
-                break
-        if not sender_sim:
-            return jsonify({'message': 'Invalid SIM card ID!'}), 400
-    else:
-        # Get next available SIM card
-        sender_sim = get_next_available_sim()
-        if not sender_sim:
-            return jsonify({'message': 'No available SIM cards!'}), 400
-
-    # Create SMS record
-    sms_id = str(uuid.uuid4())
-    sms_record = {
-        'id': sms_id,
-        'recipient': recipient,
-        'message': message.strip(),
-        'timestamp': time.time(),
-        'status': 'sent',
-        'sender_sim': sender_sim["number"]  # Add sender SIM number to record
-    }
-
-    # Store in outbox
-    sms_outbox.append(sms_record)
-
-    # Log the action
-    log_entry = {
-        'id': str(uuid.uuid4()),
-        'timestamp': time.time(),
-        'action': 'send_sms',
-        'sms_id': sms_id,
-        'recipient': recipient,
-        'sender_sim': sender_sim["number"],
-        'status': 'sent'
-    }
-    logs.append(log_entry)
-
-    # In a real system, here we would send the SMS via the GSM module
-    # For this demonstration, we'll simulate successful sending
-
-    # Notify all clients that a new SMS has been sent
-    socketio.emit('sms_sent', sms_record)
     try:
-        payload = json.dumps(sms_record)
-        print("MQTT payload:", payload)
-        publish.single(
-            topic="sms/send",
-            payload=payload,
-            hostname="localhost"
-        )
-        print("MQTT message published successfully.")
-    except Exception as e:
-        print("MQTT publish failed:", str(e))
-    return jsonify({
-        'message': 'SMS sent successfully',
-        'sms_id': sms_id,
-        'timestamp': sms_record['timestamp'],
-        'sender_sim': sender_sim["number"]
-    })
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
 
-# Get inbox SMS endpoint
+        # Validate required fields
+        if not data.get('recipient'):
+            return jsonify({'error': 'Recipient phone number is required'}), 400
+        if not data.get('message'):
+            return jsonify({'error': 'Message content is required'}), 400
+
+        recipient = data['recipient']
+        message_text = data['message']
+        sim_card_id = data.get('sim_card_id')
+
+        # Validate phone number format
+        if not recipient.startswith('+'):
+            return jsonify({'error': 'Phone number must start with + and include country code'}), 400
+
+        # Get SIM card
+        sim_card = None
+        if sim_card_id:
+            sim_card = SimCard.query.get(sim_card_id)
+            if not sim_card:
+                return jsonify({'error': f'No SIM card found with ID: {sim_card_id}'}), 400
+            if sim_card.status != 'active':
+                return jsonify({'error': f'SIM card {sim_card_id} is not active'}), 400
+        else:
+            sim_card = get_next_available_sim()
+            if not sim_card:
+                return jsonify({'error': 'No active SIM cards available'}), 400
+
+        # Create message record
+        message = Message(
+            recipient=recipient,
+            message=message_text,
+            status='pending',
+            direction='outgoing',
+            sender_sim=sim_card.id
+        )
+        db.session.add(message)
+
+        # Log the action
+        log = Log(
+            action='send_sms',
+            details=json.dumps({
+                'recipient': recipient,
+                'message_id': message.id,
+                'sim_card': sim_card.id
+            }),
+            status='pending',
+            sender_sim=sim_card.id
+        )
+        db.session.add(log)
+        
+        # Commit both message and log
+        db.session.commit()
+
+        # Emit socket event
+        socketio.emit('sms_status_update', {
+            'message_id': message.id,
+            'recipient': recipient,
+            'status': 'pending'
+        })
+
+        return jsonify({
+            'message': 'SMS queued for sending',
+            'message_id': message.id,
+            'sender_sim': sim_card.number
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error in send_sms: {str(e)}")  # Add logging
+        return jsonify({'error': f'Failed to send SMS: {str(e)}'}), 500
+
 @app.route('/api/sms/inbox', methods=['GET'])
 @require_api_key
 def get_inbox():
-    return jsonify({
-        'messages': sms_inbox,
-        'count': len(sms_inbox)
-    })
+    try:
+        messages = Message.query.filter_by(direction='incoming').order_by(Message.timestamp.desc()).all()
+        return jsonify({
+            'messages': [msg.to_dict() for msg in messages]
+        })
+    except Exception as e:
+        print(f"Error in get_inbox: {str(e)}")  # Add logging
+        return jsonify({'error': 'Failed to fetch inbox messages'}), 500
 
-# Get outbox SMS endpoint
 @app.route('/api/sms/outbox', methods=['GET'])
 @require_api_key
 def get_outbox():
-    return jsonify({
-        'messages': sms_outbox,
-        'count': len(sms_outbox)
-    })
+    try:
+        messages = Message.query.filter_by(direction='outgoing').order_by(Message.timestamp.desc()).all()
+        return jsonify({
+            'messages': [msg.to_dict() for msg in messages]
+        })
+    except Exception as e:
+        print(f"Error in get_outbox: {str(e)}")  # Add logging
+        return jsonify({'error': 'Failed to fetch outbox messages'}), 500
 
-# Get logs endpoint
 @app.route('/api/logs', methods=['GET'])
 @require_api_key
 def get_logs():
+    logs = Log.query.order_by(Log.timestamp.desc()).all()
     return jsonify({
-        'logs': logs,
-        'count': len(logs)
+        'logs': [log.to_dict() for log in logs]
     })
 
-# Simulate receiving an SMS
 @app.route('/api/simulate/receive_sms', methods=['POST'])
 def simulate_receive_sms():
     data = request.get_json()
-
-    # Validate input
-    sender = data.get('sender')
-    message = data.get('message')
-
-    if not sender or not message:
-        return jsonify({'message': 'Sender and message are required!'}), 400
-
-    # Process phone number format
-    sender = sender.strip().replace(' ', '')
-    if not sender.startswith('+'):
-        sender = '+' + sender
-
-    # Create SMS record
-    sms_id = str(uuid.uuid4())
-    sms_record = {
-        'id': sms_id,
-        'sender': sender,
-        'message': message,
-        'timestamp': time.time(),
-        'status': 'received'
-    }
-
-    # Store in inbox
-    sms_inbox.append(sms_record)
-
-    # Log the action
-    log_entry = {
-        'id': str(uuid.uuid4()),
-        'timestamp': time.time(),
-        'action': 'receive_sms',
-        'sms_id': sms_id,
-        'sender': sender,
-        'status': 'received'
-    }
-    logs.append(log_entry)
-
-    # Notify all clients that a new SMS has been received
-    socketio.emit('sms_received', sms_record)
-
-    return jsonify({
-        'message': 'SMS received successfully',
-        'sms_id': sms_id,
-        'timestamp': sms_record['timestamp']
-    })
-
-# API documentation endpoint (simple version)
-@app.route('/api/docs')
-def api_docs():
-    return render_template('api_docs.html')
-
-# Create templates directory if it doesn't exist
-if not os.path.exists('templates'):
-    os.makedirs('templates')
-
-# Create static directory if it doesn't exist
-if not os.path.exists('static'):
-    os.makedirs('static')
-
-# Create template files in the templates directory
-@app.route('/setup', methods=['GET'])
-def setup():
-    create_template_files()
-    return jsonify({'message': 'Template files created successfully'})
-
-def create_template_files():
-    # This function would create template files in a real setup
-    pass
+    if not data or not data.get('sender') or not data.get('message'):
+        return jsonify({'message': 'Sender and message are required'}), 400
+    
+    try:
+        message = Message(
+            sender=data['sender'],
+            message=data['message'],
+            direction='incoming',
+            status='received'
+        )
+        db.session.add(message)
+        db.session.commit()
+        
+        log = Log(
+            action='receive_sms',
+            details=json.dumps({
+                'sender': data['sender'],
+                'message': data['message']
+            }),
+            status='success'
+        )
+        db.session.add(log)
+        db.session.commit()
+        
+        socketio.emit('new_sms_received', {
+            'sender': data['sender'],
+            'message': data['message']
+        })
+        
+        return jsonify({'message': 'SMS received successfully'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': str(e)}), 500
 
 @app.route('/api/generate-api-key', methods=['POST'])
 @token_required
 def generate_api_key(current_user):
-    # Generate a new API key
-    new_api_key = secrets.token_hex(16)
-    current_user['api_key'] = new_api_key
-    return jsonify({'api_key': new_api_key, 'message': 'API key generated successfully'})
+    try:
+        api_key = secrets.token_hex(32)
+        current_user.api_key = api_key
+        db.session.commit()
+        
+        log = Log(
+            action='generate_api_key',
+            details=json.dumps({'user_id': current_user.id}),
+            status='success'
+        )
+        db.session.add(log)
+        db.session.commit()
+        
+        return jsonify({'api_key': api_key})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': str(e)}), 500
 
-# Run the application
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5001, debug=True)
