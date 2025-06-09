@@ -1537,27 +1537,24 @@
                         const formattedDate = date.toLocaleString();
                         
                         let detailsText = 'N/A';
-                        if (log.details) {
-                            if (typeof log.details === 'string') {
-                                try {
-                                    const parsedDetails = JSON.parse(log.details);
-                                    detailsText = parsedDetails.formatted_details || log.details;
-                                } catch {
-                                    detailsText = log.details;
-                                }
-                            } else if (typeof log.details === 'object') {
-                                detailsText = log.details.formatted_details || Object.entries(log.details)
-                                    .map(([key, value]) => `${key}: ${value}`)
-                                    .join(', ');
-                            }
-                        }
-                        
-                        // SIM Card column
                         let simCardText = 'N/A';
-                        if (log.sender_sim) {
-                            simCardText = log.sender_sim;
-                        } else if (log.action === 'send_sms_success' || log.action === 'sms_sent' || log.action === 'send_sms') {
-                            simCardText = 'Auto-selected';
+                        
+                        if (log.details) {
+                            try {
+                                const parsedDetails = typeof log.details === 'string' ? JSON.parse(log.details) : log.details;
+                                
+                                // For receive_sms action, show the actual sender number
+                                if (log.action === 'receive_sms') {
+                                    detailsText = `From: ${parsedDetails.sender || 'N/A'} To: ${parsedDetails.recipient || 'N/A'}`;
+                                    simCardText = parsedDetails.receiver_sim || 'N/A';
+                                } else {
+                                    detailsText = parsedDetails.formatted_details || log.details;
+                                    simCardText = log.sender_sim || 'N/A';
+                                }
+                            } catch {
+                                detailsText = log.details;
+                                simCardText = log.sender_sim || 'N/A';
+                            }
                         }
                         
                         let statusBadge = `<span class="badge badge-secondary">${(log.status || 'INFO').toUpperCase()}</span>`;
