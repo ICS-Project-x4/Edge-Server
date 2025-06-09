@@ -923,6 +923,69 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Message Statistics -->
+                        <div class="card" style="margin-bottom: 20px;">
+                            <div class="card-header">Message Statistics</div>
+                            <div class="card-body">
+                                <div class="stats-grid">
+                                    <div class="stat-item">
+                                        <h3>Total Messages</h3>
+                                        <p id="total-messages">Loading...</p>
+                                    </div>
+                                    <div class="stat-item">
+                                        <h3>Incoming Messages</h3>
+                                        <p id="incoming-messages">Loading...</p>
+                                    </div>
+                                    <div class="stat-item">
+                                        <h3>Outgoing Messages</h3>
+                                        <p id="outgoing-messages">Loading...</p>
+                                    </div>
+                                    <div class="stat-item">
+                                        <h3>Messages Today</h3>
+                                        <p id="messages-today">Loading...</p>
+                                    </div>
+                                </div>
+                                <div class="card" style="margin-top: 15px;">
+                                    <div class="card-header">Messages per Day (Last 7 Days)</div>
+                                    <div class="card-body">
+                                        <pre id="messages-per-day" style="margin: 0; white-space: pre-wrap;">Loading...</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SIM Card Statistics -->
+                        <div class="card" style="margin-bottom: 20px;">
+                            <div class="card-header">SIM Card Statistics</div>
+                            <div class="card-body">
+                                <div class="stats-grid">
+                                    <div class="stat-item">
+                                        <h3>Total SIM Cards</h3>
+                                        <p id="total-sims">Loading...</p>
+                                    </div>
+                                    <div class="stat-item">
+                                        <h3>Active SIM Cards</h3>
+                                        <p id="active-sims">Loading...</p>
+                                    </div>
+                                    <div class="stat-item">
+                                        <h3>Inactive SIM Cards</h3>
+                                        <p id="inactive-sims">Loading...</p>
+                                    </div>
+                                    <div class="stat-item">
+                                        <h3>Most Used SIM</h3>
+                                        <p id="most-used-sim">Loading...</p>
+                                    </div>
+                                </div>
+                                <div class="card" style="margin-top: 15px;">
+                                    <div class="card-header">Top 5 Most Used SIM Cards</div>
+                                    <div class="card-body">
+                                        <pre id="most-used-sims" style="margin: 0; white-space: pre-wrap;">Loading...</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
             <!-- Database File Info -->
 <div class="card" style="margin-bottom: 20px;">
     <div class="card-header">Database File Info</div>
@@ -2284,9 +2347,6 @@
     const spinner = document.getElementById('statistics-spinner');
     if (spinner) spinner.style.display = 'block';
 
-    // It looks like 'table-memory-usage' is not used here; might be a leftover from your code.
-    // const tableBody = document.getElementById('table-memory-usage');
-
     try {
         const data = await apiFetch('/api/statistics');
 
@@ -2320,13 +2380,33 @@
             document.getElementById('db-last-updated').textContent = new Date(data.database.last_updated).toLocaleString();
         }
 
+        // Update Message Statistics
+        if (data.messages) {
+            document.getElementById('total-messages').textContent = data.messages.total_messages;
+            document.getElementById('incoming-messages').textContent = data.messages.incoming_messages;
+            document.getElementById('outgoing-messages').textContent = data.messages.outgoing_messages;
+            document.getElementById('messages-today').textContent = data.messages.messages_today;
+            const messagesPerDay = data.messages.messages_per_day.map(day =>
+                `${day.date}: ${day.count} messages`
+            ).join('\n');
+            document.getElementById('messages-per-day').textContent = messagesPerDay;
+        }
+
+        // Update SIM Card Statistics
+        if (data.sim_cards) {
+            document.getElementById('total-sims').textContent = data.sim_cards.total_sims;
+            document.getElementById('active-sims').textContent = data.sim_cards.active_sims;
+            document.getElementById('inactive-sims').textContent = data.sim_cards.inactive_sims;
+            document.getElementById('most-used-sim').textContent =
+                `${data.sim_cards.most_used_sim.number} (${data.sim_cards.most_used_sim.message_count} messages)`;
+            const mostUsedSims = data.sim_cards.most_used_sims.map(sim =>
+                `${sim.number}: ${sim.message_count} messages`
+            ).join('\n');
+            document.getElementById('most-used-sims').textContent = mostUsedSims;
+        }
+
     } catch (error) {
         console.error('Error fetching statistics:', error);
-        // If you want to clear or show error messages in the table/component:
-        // const tableBody = document.getElementById('component-memory-usage');
-        // if (tableBody) {
-        //     tableBody.innerHTML = '<tr><td colspan="4" class="text-center">Error loading statistics</td></tr>';
-        // }
         addNotification(`Failed to fetch statistics: ${error.message}`, 'danger');
     } finally {
         if (spinner) spinner.style.display = 'none';
@@ -2363,8 +2443,9 @@ function formatBytes(bytes, decimals = 2) {
                 }
             });
 
-            // Initial fetch
-            fetchSmsStatuses();
+            // Initial fetch and auto-refresh for statistics
+            fetchStatistics();
+            setInterval(fetchStatistics, 30000);
         });
     </script>
 </body>

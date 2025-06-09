@@ -518,15 +518,110 @@ def get_component_memory_usage():
 
     return components
 
+def get_message_statistics():
+    """Get statistics about messages"""
+    try:
+        total_messages = Message.query.count()
+        incoming_messages = Message.query.filter_by(direction='incoming').count()
+        outgoing_messages = Message.query.filter_by(direction='outgoing').count()
+        
+        # Get messages for today
+        today = datetime.datetime.now().date()
+        messages_today = Message.query.filter(
+            db.func.date(Message.timestamp) == today
+        ).count()
+        
+        # Get messages per day for the last 7 days
+        seven_days_ago = datetime.datetime.now() - datetime.timedelta(days=7)
+        messages_per_day = db.session.query(
+            db.func.date(Message.timestamp).label('date'),
+            db.func.count(Message.id).label('count')
+        ).filter(Message.timestamp >= seven_days_ago)\
+         .group_by(db.func.date(Message.timestamp))\
+         .all()
+        
+        messages_per_day = [{
+            'date': day.date,
+            'count': day.count
+        } for day in messages_per_day]
+        
+        return {
+            'total_messages': total_messages,
+            'incoming_messages': incoming_messages,
+            'outgoing_messages': outgoing_messages,
+            'messages_today': messages_today,
+            'messages_per_day': messages_per_day
+        }
+    except Exception as e:
+        print(f"Error getting message statistics: {e}")
+        return {
+            'total_messages': 0,
+            'incoming_messages': 0,
+            'outgoing_messages': 0,
+            'messages_today': 0,
+            'messages_per_day': []
+        }
+
+
+from sqlalchemy import func, desc
+
+def get_sim_card_statistics():
+    """Get statistics about SIM cards"""
+    try:
+        total_sims = SimCard.query.count()
+        active_sims = SimCard.query.filter_by(status='active').count()
+        inactive_sims = SimCard.query.filter_by(status='inactive').count()
+
+        # Get top 5 most used SIMs
+        results = (
+            db.session.query(
+                SimCard.number.label("number"),
+                func.count(Message.id).label("message_count")
+            )
+            .join(Message, SimCard.id == Message.sender_sim)
+            .group_by(SimCard.number)
+            .order_by(desc("message_count"))
+            .limit(5)
+            .all()
+        )
+
+        most_used_sims = [
+            {'number': r.number, 'message_count': r.message_count}
+            for r in results
+        ]
+
+        most_used_sim = most_used_sims[0] if most_used_sims else {'number': 'N/A', 'message_count': 0}
+
+        return {
+            'total_sims': total_sims,
+            'active_sims': active_sims,
+            'inactive_sims': inactive_sims,
+            'most_used_sim': most_used_sim,
+            'most_used_sims': most_used_sims
+        }
+
+    except Exception as e:
+        print(f"Error getting SIM card statistics: {e}")
+        return {
+            'total_sims': 0,
+            'active_sims': 0,
+            'inactive_sims': 0,
+            'most_used_sim': {'number': 'N/A', 'message_count': 0},
+            'most_used_sims': []
+        }
+
+
 @app.route('/api/statistics', methods=['GET'])
 @require_api_key
 def get_statistics():
-    """Get system statistics including memory usage and database size"""
+    """Get system statistics including memory usage, database size, messages, and SIM cards"""
     try:
         stats = {
             'memory': get_system_memory_stats(),
             'components': get_component_memory_usage(),
-            'database': get_database_file_size()
+            'database': get_database_file_size(),
+            'messages': get_message_statistics(),
+            'sim_cards': get_sim_card_statistics()
         }
         return jsonify(stats)
     except Exception as e:
