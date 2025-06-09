@@ -46,37 +46,126 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 db.init_app(app)
 init_db(app)
 
-# MQTT Client setup
-mqtt_client = mqtt.Client()
+import json
+import paho.mqtt.client as mqtt
 
-def on_connect(client, userdata, flags, rc):
-    print("Connected to MQTT broker with result code: " + str(rc))
-    client.subscribe("sms/status")
-    print("Subscribed to topic: sms/status")
+# MQTT Client setup with a message callback parameter
+def create_mqtt_client(topic, on_message_callback):
+    mqtt_client = mqtt.Client()
 
-def on_message(client, userdata, msg):
+    def on_connect(client, userdata, flags, rc):
+        print(f"Connected to MQTT broker with result code: {rc}")
+        client.subscribe(topic)
+        print(f"Subscribed to topic: {topic}")
+
+    def on_message(client, userdata, msg):
+        try:
+            payload = msg.payload.decode()
+            print(f"Received MQTT message on topic {msg.topic}: {payload}")
+            on_message_callback(payload)
+        except Exception as e:
+            print(f"Error processing MQTT message: {str(e)}")
+
+    mqtt_client.on_connect = on_connect
+    mqtt_client.on_message = on_message
+
+    return mqtt_client
+
+
+def handle_sms_status_message(payload):
     try:
-        payload = msg.payload.decode()
-        print(f"Received MQTT message on topic {msg.topic}: {payload}")
-        print("Forwarding message to Socket.io clients...")
-        socketio.emit('mqtt_status', payload)
-        data = json.loads(msg.payload.decode())
-        sms_status = SmsStatus(
-            sender_number=data["sender_number"],
-            receiver_number=data["receiver_number"],
-            message=data["message"],
-            status=data["status"]
-        )
-        with app.app_context():
-            db.session.add(sms_status)
-            db.session.commit()
-        print("Saved:", sms_status.to_dict())
-        print("Message forwarded successfully")
-    except Exception as e:
-        print(f"Error processing MQTT message: {str(e)}")
+        print("Processing MQTT status message...")
+        data = json.loads(payload)
+        
+        # Validate required fields
+        required_fields = ['sender_number', 'receiver_number', 'message', 'status']
+        if not all(field in data for field in required_fields):
+            print(f"Missing required fields in payload: {payload}")
+            return
 
-mqtt_client.on_connect = on_connect
-mqtt_client.on_message = on_message
+        with app.app_context():
+            try:
+                # Start a transaction
+                db.session.begin_nested()
+
+                # Find or create SimCard
+                sim_card = SimCard.query.filter_by(number=data['sender_number']).first()
+                if not sim_card:
+                    sim_card = SimCard(
+                        number=data['sender_number'],
+                        status='active'
+                    )
+                    db.session.add(sim_card)
+                    db.session.flush()
+
+                # Create Message entry
+                message = Message(
+                    sender=data['sender_number'],
+                    recipient=data['receiver_number'],
+                    message=data['message'],
+                    direction='incoming',
+                    sender_sim=sim_card.id,
+                    status='received'
+                )
+                db.session.add(message)
+                db.session.flush()
+
+                # Create SmsStatus entry
+                sms_status = SmsStatus(
+                    sender_number=data['sender_number'],
+                    receiver_number=data['receiver_number'],
+                    message=data['message'],
+                    status='received'
+                )
+                db.session.add(sms_status)
+
+                # Create single log entry with improved details format
+                log = Log(
+                    action='receive_sms',
+                    details=json.dumps({
+                        'recipient': data['receiver_number'],
+                        'message_id': message.id,
+                        'sim_card': sim_card.number,
+                        'sender': data['sender_number'],
+                        'message': data['message'][:100],
+                        'status': 'received',
+                        'formatted_details': f"From: {data['sender_number']} To: {data['receiver_number']} - {data['message'][:50]}..."
+                    }),
+                    status='SUCCESS',
+                    sender_sim=sim_card.id
+                )
+                db.session.add(log)
+
+                # Commit all changes
+                db.session.commit()
+
+                # Emit socket events
+                socketio.emit('mqtt_status', payload)
+                socketio.emit('sms_status_update', {
+                    'message_id': message.id,
+                    'recipient': data['receiver_number'],
+                    'sender': data['sender_number'],
+                    'message': data['message'],
+                    'status': 'received',
+                    'timestamp': message.timestamp.isoformat(),
+                    'sim_card': sim_card.number
+                })
+
+                print(f"Successfully processed message from {data['sender_number']} to {data['receiver_number']}")
+                print(f"Message ID: {message.id}, SIM Card: {sim_card.number}")
+
+            except Exception as db_error:
+                db.session.rollback()
+                print(f"Database error while processing message: {str(db_error)}")
+                raise
+
+    except json.JSONDecodeError as json_error:
+        print(f"Invalid JSON payload: {str(json_error)}")
+    except Exception as e:
+        print(f"Error processing message: {str(e)}")
+
+# Create single MQTT client for both status and receive
+mqtt_client = create_mqtt_client('/sms/status', handle_sms_status_message)
 
 try:
     print("Attempting to connect to MQTT broker...")
@@ -375,44 +464,6 @@ def get_logs():
     return jsonify({
         'logs': [log.to_dict() for log in logs]
     })
-
-@app.route('/api/simulate/receive_sms', methods=['POST'])
-def simulate_receive_sms():
-    data = request.get_json()
-    if not data or not data.get('sender') or not data.get('message'):
-        return jsonify({'message': 'Sender and message are required'}), 400
-    
-    try:
-        message = Message(
-            sender=data['sender'],
-            message=data['message'],
-            direction='incoming',
-            status='received'
-        )
-        db.session.add(message)
-        db.session.commit()
-        
-        log = Log(
-            action='receive_sms',
-            details=json.dumps({
-                'sender': data['sender'],
-                'message': data['message']
-            }),
-            status='success'
-        )
-        db.session.add(log)
-        db.session.commit()
-        
-        socketio.emit('new_sms_received', {
-            'sender': data['sender'],
-            'message': data['message']
-        })
-        
-        return jsonify({'message': 'SMS received successfully'})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'message': str(e)}), 500
-
 @app.route('/api/generate-api-key', methods=['POST'])
 @token_required
 def generate_api_key(current_user):

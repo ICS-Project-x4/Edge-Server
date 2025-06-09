@@ -1539,21 +1539,19 @@
                         let detailsText = 'N/A';
                         if (log.details) {
                             if (typeof log.details === 'string') {
-                                detailsText = log.details;
+                                try {
+                                    const parsedDetails = JSON.parse(log.details);
+                                    detailsText = parsedDetails.formatted_details || log.details;
+                                } catch {
+                                    detailsText = log.details;
+                                }
                             } else if (typeof log.details === 'object') {
-                                detailsText = Object.entries(log.details)
+                                detailsText = log.details.formatted_details || Object.entries(log.details)
                                     .map(([key, value]) => `${key}: ${value}`)
                                     .join(', ');
                             }
                         }
                         
-                        if (log.action === 'send_sms_success' || log.action === 'sms_sent' || log.action === 'send_sms') {
-                            detailsText = `To: ${log.details?.recipient || log.recipient || 'N/A'}`;
-                        }
-                        if (log.action === 'receive_sms' || log.action === 'sms_received') {
-                            detailsText = `From: ${log.details?.sender || log.sender || 'N/A'}`;
-                        }
-
                         // SIM Card column
                         let simCardText = 'N/A';
                         if (log.sender_sim) {
