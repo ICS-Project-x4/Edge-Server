@@ -29,7 +29,54 @@
             margin: 0;
             padding: 0;
         }
+        #database-file-info {
+    margin-top: 20px;
+    max-width: 450px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.1);
+    background-color: #fff;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
 
+  #database-file-info .card-header {
+    background-color: #007bff;
+    color: white;
+    font-weight: 600;
+    font-size: 1.2rem;
+    padding: 12px 20px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+  }
+
+  #database-file-info .card-body {
+    padding: 20px;
+  }
+
+  #database-file-info .info-grid {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    row-gap: 15px;
+    column-gap: 15px;
+    align-items: center;
+  }
+
+  #database-file-info .info-label {
+    font-weight: 600;
+    color: #555;
+  }
+
+  #database-file-info .info-value {
+    font-size: 1rem;
+    color: #222;
+    word-break: break-word;
+  }
+
+  /* Loading text style */
+  #database-file-info .info-value.loading {
+    color: #999;
+    font-style: italic;
+  }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             line-height: 1.6;
@@ -595,6 +642,8 @@
                 font-size: 12px;
             }
         }
+
+    
     </style>
 </head>
 <body>
@@ -619,6 +668,7 @@
                 <li><a href="#" data-tab="outbox-tab">Outbox</a></li>
                 <li><a href="#" data-tab="logs-tab">Logs</a></li>
                 <li><a href="#" data-tab="sim-management-tab">SIM Management</a></li>
+                <li><a href="#" data-tab="statistics-tab">Statistics</a></li>
                 <li><a href="#" data-tab="api-tab">API Info</a></li>
                 <li><a href="#" data-tab="account-tab">Account</a></li>
             </ul>
@@ -796,11 +846,11 @@
                                         <th>Receiver</th>
                                         <th>Message</th>
                                         <th>Status</th>
-                                    </tr>
+                                     </tr>
                                 </thead>
                                 <tbody id="mqtt-table-body">
                                     <tr>
-                                        <td colspan="5" class="text-center">Waiting for MQTT messages...</td>
+                                        <td colspan="6" class="text-center">Loading SMS statuses...</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -838,6 +888,94 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Statistics Tab -->
+            <div id="statistics-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <span>System Statistics</span>
+                        <button id="refresh-statistics" class="btn btn-primary btn-sm">Refresh</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="statistics-spinner" class="spinner"></div>
+                        
+                        <!-- Memory Usage Overview -->
+                        <div class="card" style="margin-bottom: 20px;">
+                            <div class="card-header">Memory Usage Overview</div>
+                            <div class="card-body">
+                                <div class="stats-grid">
+                                    <div class="stat-item">
+                                        <h3>Total Memory</h3>
+                                        <p id="total-memory">Loading...</p>
+                                    </div>
+                                    <div class="stat-item">
+                                        <h3>Used Memory</h3>
+                                        <p id="used-memory">Loading...</p>
+                                    </div>
+                                    <div class="stat-item">
+                                        <h3>Free Memory</h3>
+                                        <p id="free-memory">Loading...</p>
+                                    </div>
+                                    <div class="stat-item">
+                                        <h3>Memory Usage %</h3>
+                                        <p id="memory-usage-percent">Loading...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+            <!-- Database File Info -->
+<div class="card" style="margin-bottom: 20px;">
+    <div class="card-header">Database File Info</div>
+    <div class="card-body">
+      <div class="stats-grid">
+        <div class="stat-item">
+          <h3>File Name</h3>
+          <p id="db-file-name">Loading...</p>
+        </div>
+        <div class="stat-item">
+          <h3>Size (MB)</h3>
+          <p id="db-size-mb">Loading...</p>
+        </div>
+        <div class="stat-item">
+          <h3>Size (Bytes)</h3>
+          <p id="db-size-bytes">Loading...</p>
+        </div>
+        <div class="stat-item">
+          <h3>Last Updated</h3>
+          <p id="db-last-updated">Loading...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+                        <!-- Memory Usage by Component -->
+                        <div class="card" style="margin-top: 20px;">
+                            <div class="card-header">Memory Usage by Component</div>
+                            <div class="card-body">
+                                <div style="overflow-x: auto;">
+                                    <table class="table">
+                                        <thead>
+                                            <tr>
+                                                <th>Component</th>
+                                                <th>Memory Usage</th>
+                                                <th>Percentage</th>
+                                                <th>Last Updated</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="component-memory-usage">
+                                            <tr>
+                                                <td colspan="4" class="text-center">Loading component statistics...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+            
+                    </div>
+                </div>
+            </div>
+             
 
             <!-- API Info Tab -->
             <div id="api-tab" class="tab-content">
@@ -1795,6 +1933,7 @@
                     <td>${data.receiver_number || 'N/A'}</td>
                     <td>${data.message || 'N/A'}</td>
                     <td><span class="badge badge-${getStatusBadgeClass(data.status)}">${data.status || 'N/A'}</span></td>
+                    <td>${data.sim_card_id || 'N/A'}</td>
                 `;
 
                 // Add the new row at the top of the table
@@ -2083,6 +2222,149 @@
 
             // Initial update of API examples
             updateApiExamples();
+
+            // Add function to fetch SMS statuses
+            async function fetchSmsStatuses(e) {
+                const spinner = document.getElementById('mqtt-spinner');
+                if(spinner) spinner.style.display = 'block';
+                const tableBody = document.getElementById('mqtt-table-body');
+                
+                try {
+                    const data = await apiFetch('/api/sms-status');
+                    if (!data.statuses || data.statuses.length === 0) {
+                        tableBody.innerHTML = '<tr><td colspan="6" class="text-center">No SMS statuses available</td></tr>';
+                        return;
+                    }
+                    
+                    tableBody.innerHTML = data.statuses.map(status => {
+                        const date = new Date((status.timestamp || Date.now()/1000) * 1000);
+                        const formattedDate = date.toLocaleString();
+                        
+                        let statusBadge = `<span class="badge badge-secondary">${(status.status || 'INFO').toUpperCase()}</span>`;
+                        const lowerStatus = (status.status || '').toLowerCase();
+                        if (['success', 'sent', 'delivered'].includes(lowerStatus)) statusBadge = `<span class="badge badge-success">${status.status.toUpperCase()}</span>`;
+                        if (['failed', 'error'].includes(lowerStatus)) statusBadge = `<span class="badge badge-danger">${status.status.toUpperCase()}</span>`;
+                        if (['pending', 'queued'].includes(lowerStatus)) statusBadge = `<span class="badge badge-warning">${status.status.toUpperCase()}</span>`;
+                        
+                        return `
+                            <tr>
+                                <td>${formattedDate}</td>
+                                <td>${status.sender_number || 'N/A'}</td>
+                                <td>${status.receiver_number || 'N/A'}</td>
+                                <td style="max-width: 200px; overflow-wrap: break-word;">${status.message || 'N/A'}</td>
+                                <td>${statusBadge}</td>
+                            </tr>`;
+                    }).join('');
+                    e.preventDefault(); // 🔥 prevents page reload
+
+                } catch (error) {
+                    console.error('Error fetching SMS statuses:', error);
+                    tableBody.innerHTML = '<tr><td colspan="6" class="text-center">Error loading SMS statuses</td></tr>';
+                } finally {
+                    if(spinner) spinner.style.display = 'none';
+                }
+            }
+
+            // Update the refresh button handler
+            document.getElementById('refresh-mqtt').addEventListener('click', fetchSmsStatuses);
+
+            // Add socket event listener for real-time updates
+            socket.on('sms_status_update', (data) => {
+                console.log('Socket event: sms_status_update', data);
+                if (document.getElementById('mqtt-table-body')) {
+                    fetchSmsStatuses();
+                }
+            });
+
+            // Initial fetch
+            fetchSmsStatuses();
+
+            // Statistics functionality
+            async function fetchStatistics() {
+    const spinner = document.getElementById('statistics-spinner');
+    if (spinner) spinner.style.display = 'block';
+
+    // It looks like 'table-memory-usage' is not used here; might be a leftover from your code.
+    // const tableBody = document.getElementById('table-memory-usage');
+
+    try {
+        const data = await apiFetch('/api/statistics');
+
+        // Update Memory Overview
+        if (data.memory) {
+            document.getElementById('total-memory').textContent = formatBytes(data.memory.total);
+            document.getElementById('used-memory').textContent = formatBytes(data.memory.used);
+            document.getElementById('free-memory').textContent = formatBytes(data.memory.free);
+            document.getElementById('memory-usage-percent').textContent =
+                `${((data.memory.used / data.memory.total) * 100).toFixed(1)}%`;
+        }
+
+        // Update Component Memory Usage
+        if (data.components && data.components.length > 0) {
+            const componentBody = document.getElementById('component-memory-usage');
+            componentBody.innerHTML = data.components.map(component => `
+                <tr>
+                    <td>${component.name}</td>
+                    <td>${formatBytes(component.memory_usage)}</td>
+                    <td>${component.percentage.toFixed(1)}%</td>
+                    <td>${new Date(component.last_updated).toLocaleString()}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Update Database File Info
+        if (data.database) {
+            document.getElementById('db-file-name').textContent = data.database.name || 'N/A';
+            document.getElementById('db-size-mb').textContent = `${data.database.size_mb.toFixed(2)} MB`;
+            document.getElementById('db-size-bytes').textContent = `${data.database.size_bytes} Bytes`;
+            document.getElementById('db-last-updated').textContent = new Date(data.database.last_updated).toLocaleString();
+        }
+
+    } catch (error) {
+        console.error('Error fetching statistics:', error);
+        // If you want to clear or show error messages in the table/component:
+        // const tableBody = document.getElementById('component-memory-usage');
+        // if (tableBody) {
+        //     tableBody.innerHTML = '<tr><td colspan="4" class="text-center">Error loading statistics</td></tr>';
+        // }
+        addNotification(`Failed to fetch statistics: ${error.message}`, 'danger');
+    } finally {
+        if (spinner) spinner.style.display = 'none';
+    }
+}
+
+// Helper function remains unchanged
+function formatBytes(bytes, decimals = 2) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
+            // Add event listener for statistics refresh button
+            document.getElementById('refresh-statistics').addEventListener('click', fetchStatistics);
+
+            // Add statistics tab to loadTabData function
+            const originalLoadTabData = loadTabData;
+            loadTabData = function(tabId) {
+                originalLoadTabData(tabId);
+                if (tabId === 'statistics-tab') {
+                    fetchStatistics();
+                }
+            };
+
+            // Add socket event listener for real-time statistics updates
+            socket.on('statistics_update', (data) => {
+                console.log('Socket event: statistics_update', data);
+                if (document.getElementById('statistics-tab').classList.contains('active')) {
+                    fetchStatistics();
+                }
+            });
+
+            // Initial fetch
+            fetchSmsStatuses();
         });
     </script>
 </body>

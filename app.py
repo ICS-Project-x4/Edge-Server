@@ -4,6 +4,8 @@ import json
 import time
 import datetime
 import uuid
+import psutil
+import sqlite3
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_cors import CORS
 from flask_socketio import SocketIO
@@ -12,7 +14,7 @@ from functools import wraps
 import paho.mqtt.client as mqtt
 import paho.mqtt.publish as publish
 import secrets
-from database import db, User, SimCard, Message, Log, init_db
+from database import db, User, SimCard, Message, Log, init_db, SmsStatus
 
 # Import eventlet and monkey patch
 import eventlet
@@ -58,6 +60,17 @@ def on_message(client, userdata, msg):
         print(f"Received MQTT message on topic {msg.topic}: {payload}")
         print("Forwarding message to Socket.io clients...")
         socketio.emit('mqtt_status', payload)
+        data = json.loads(msg.payload.decode())
+        sms_status = SmsStatus(
+            sender_number=data["sender_number"],
+            receiver_number=data["receiver_number"],
+            message=data["message"],
+            status=data["status"]
+        )
+        with app.app_context():
+            db.session.add(sms_status)
+            db.session.commit()
+        print("Saved:", sms_status.to_dict())
         print("Message forwarded successfully")
     except Exception as e:
         print(f"Error processing MQTT message: {str(e)}")
@@ -293,6 +306,9 @@ def send_sms():
             sender_sim=sim_card.id
         )
         db.session.add(message)
+        db.session.flush()  # ensure defaults like id and timestamp are generated
+
+        publish.single("sms/send", json.dumps(message.to_dict()), hostname="localhost", port=1883)
 
         # Log the action
         log = Log(
@@ -417,6 +433,104 @@ def generate_api_key(current_user):
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': str(e)}), 500
+
+@app.route('/api/sms-status', methods=['GET'])
+@require_api_key
+def get_all_sms_statuses():
+    try:
+        # Get all messages with their statuses
+        messages = SmsStatus.query.order_by(SmsStatus.timestamp.desc()).all()
+        
+        # Format the response
+        statuses = []
+        for msg in messages:
+            status = {
+                'id': msg.id,
+                'timestamp': int(msg.timestamp.timestamp()),
+                'sender_number': msg.sender_number,
+                'receiver_number': msg.receiver_number,
+                'message': msg.message,
+                'status': msg.status,
+            }
+            statuses.append(status)
+            
+        return jsonify({
+            'statuses': statuses
+        })
+    except Exception as e:
+        print(f"Error in get_all_sms_statuses: {str(e)}")
+        return jsonify({'error': 'Failed to fetch SMS statuses'}), 500
+
+def get_system_memory_stats():
+    """Get system memory statistics"""
+    memory = psutil.virtual_memory()
+    return {
+        'total': memory.total,
+        'used': memory.used,
+        'free': memory.free,
+        'percent': memory.percent
+    }
+
+def get_database_file_size(db_path='instance/sms_gateway.db'):
+    """Return the SQLite DB file size"""
+    try:
+        size_bytes = os.path.getsize(db_path)
+        size_mb = size_bytes / (1024 * 1024)
+        return {
+            'name': os.path.basename(db_path),
+            'size_bytes': size_bytes,
+            'size_mb': round(size_mb, 2),
+            'last_updated': datetime.datetime.now().isoformat()
+        }
+    except Exception as e:
+        print(f"Error getting database size: {e}")
+        return {
+            'name': os.path.basename(db_path),
+            'error': str(e),
+            'size_bytes': 0,
+            'size_mb': 0.0
+        }
+
+def get_component_memory_usage():
+    """Get memory usage by main process and database file"""
+    components = []
+
+    process = psutil.Process()
+    process_memory = process.memory_info().rss
+    total_memory = psutil.virtual_memory().total
+
+    components.append({
+        'name': 'Main Process',
+        'memory_usage': process_memory,
+        'percentage': (process_memory / total_memory) * 100,
+        'last_updated': datetime.datetime.now().isoformat()
+    })
+
+    db_info = get_database_file_size()
+    db_size_bytes = db_info.get('size_bytes', 0)
+
+    components.append({
+        'name': 'Database File',
+        'memory_usage': db_size_bytes,
+        'percentage': (db_size_bytes / total_memory) * 100,
+        'last_updated': datetime.datetime.now().isoformat()
+    })
+
+    return components
+
+@app.route('/api/statistics', methods=['GET'])
+@require_api_key
+def get_statistics():
+    """Get system statistics including memory usage and database size"""
+    try:
+        stats = {
+            'memory': get_system_memory_stats(),
+            'components': get_component_memory_usage(),
+            'database': get_database_file_size()
+        }
+        return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5001, debug=True)

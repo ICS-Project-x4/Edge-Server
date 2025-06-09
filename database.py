@@ -60,6 +60,26 @@ class Log(db.Model):
             'timestamp': int(self.timestamp.timestamp())
         }
 
+class SmsStatus(db.Model):
+    __tablename__ = 'sms_status'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    sender_number = db.Column(db.String(20), nullable=False)
+    receiver_number = db.Column(db.String(20), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "sender_number": self.sender_number,
+            "receiver_number": self.receiver_number,
+            "message": self.message,
+            "status": self.status,
+            "timestamp": int(self.timestamp.timestamp())
+        }
+
 def init_db(app):
     with app.app_context():
         db.create_all()
