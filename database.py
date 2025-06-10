@@ -51,10 +51,14 @@ class Log(db.Model):
     sender_sim = db.Column(db.String(36), db.ForeignKey('sim_card.id'))
 
     def to_dict(self):
+        try:
+            details = json.loads(self.details) if self.details else None
+        except:
+            details = self.details
         return {
             'id': self.id,
             'action': self.action,
-            'details': json.loads(self.details) if self.details else None,
+            'details': details,
             'status': self.status,
             'sender_sim': self.sender_sim,
             'timestamp': int(self.timestamp.timestamp())

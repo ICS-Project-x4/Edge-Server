@@ -55,38 +55,77 @@ def create_mqtt_client(topic, on_message_callback):
 
     def on_connect(client, userdata, flags, rc):
         print(f"Connected to MQTT broker with result code: {rc}")
+        print(f"Subscribing to topic: {topic}")
         client.subscribe(topic)
-        print(f"Subscribed to topic: {topic}")
+        print(f"Successfully subscribed to topic: {topic}")
 
     def on_message(client, userdata, msg):
         try:
+            print(f"Received message on topic {msg.topic}")
             payload = msg.payload.decode()
-            print(f"Received MQTT message on topic {msg.topic}: {payload}")
+            print(f"Message payload: {payload}")
             on_message_callback(payload)
         except Exception as e:
             print(f"Error processing MQTT message: {str(e)}")
 
+    def on_disconnect(client, userdata, rc):
+        print(f"Disconnected from MQTT broker with result code: {rc}")
+
     mqtt_client.on_connect = on_connect
     mqtt_client.on_message = on_message
+    mqtt_client.on_disconnect = on_disconnect
 
     return mqtt_client
 
 
 def handle_sms_status_message(payload):
-    print("Forwarding message to Socket.io clients...")
-    socketio.emit('mqtt_status', payload)
-    data = json.loads(payload)
-    sms_status = SmsStatus(
-        sender_number=data["sender_number"],
-        receiver_number=data["receiver_number"],
-        message=data["message"],
-        status=data["status"]
-    )
-    with app.app_context():
-        db.session.add(sms_status)
-        db.session.commit()
-    print("Saved:", sms_status.to_dict())
-    print("Message forwarded successfully")
+    print("Received status message:", payload)
+    try:
+        data = json.loads(payload)
+        print("Parsed status data:", data)
+        
+        with app.app_context():
+            try:
+                # Update the message status in the database
+                message = Message.query.filter_by(id=data.get('message_id')).first()
+                if message:
+                    print(f"Found message with ID: {message.id}, updating status to: {data['status']}")
+                    message.status = data['status']
+                    db.session.commit()
+                    print("Message status updated successfully")
+                else:
+                    print(f"No message found with ID: {data.get('message_id')}")
+                
+                # Create SMS status record
+                sms_status = SmsStatus(
+                    sender_number=data["sender_number"],
+                    receiver_number=data["receiver_number"],
+                    message=data["message"],
+                    status=data["status"]
+                )
+                db.session.add(sms_status)
+                db.session.commit()
+                
+                print("Saved status record:", sms_status.to_dict())
+                
+                # Emit socket event for status update
+                socketio.emit('sms_status_update', {
+                    'message_id': data.get('message_id'),
+                    'status': data['status'],
+                    'timestamp': datetime.datetime.now().isoformat()
+                })
+                
+                # Also emit the full status data
+                socketio.emit('mqtt_status', payload)
+                
+            except Exception as e:
+                db.session.rollback()
+                print(f"Error updating message status: {str(e)}")
+                raise
+    except json.JSONDecodeError as json_error:
+        print(f"Invalid JSON payload: {str(json_error)}")
+    except Exception as e:
+        print(f"Error processing status message: {str(e)}")
 
 # Create client and pass callback
 mqtt_client = create_mqtt_client('/sms/status',handle_sms_status_message)
@@ -161,6 +200,16 @@ def handle_sms_receive_message(payload):
                     'timestamp': message.timestamp.isoformat(),
                     'sim_card': sim_card.number
                 })
+
+                # Publish status update for the received message
+                status_payload = {
+                    'message_id': message.id,
+                    'sender_number': sender_number,
+                    'receiver_number': receiver_number,
+                    'message': message_text,
+                    'status': 'SUCCESS'
+                }
+                publish.single("sms/status", json.dumps(status_payload), hostname="localhost", port=1883)
 
                 print(f"Successfully saved incoming message from {sender_number} to {receiver_number}")
                 print(f"Message ID: {message.id}, SIM Card: {sim_card.number}")
@@ -419,14 +468,18 @@ def send_sms():
 
         publish.single("sms/send", json.dumps(message.to_dict()), hostname="localhost", port=1883)
 
-        # Log the action
+        # Create log details
+        log_details = {
+            'recipient': recipient,
+            'message_id': message.id,
+            'sim_card': sim_card.number,
+            'message': message_text[:100]  # Store first 100 chars
+        }
+        
+        # Create log entry with properly formatted details
         log = Log(
             action='send_sms',
-            details=json.dumps({
-                'recipient': recipient,
-                'message_id': message.id,
-                'sim_card': sim_card.id
-            }),
+            details=json.dumps(log_details, ensure_ascii=False),
             status='pending',
             sender_sim=sim_card.id
         )

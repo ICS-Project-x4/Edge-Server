@@ -1537,23 +1537,21 @@
                         const formattedDate = date.toLocaleString();
                         
                         let detailsText = 'N/A';
-                        let simCardText = 'N/A';
+                        let simCardText = log.sender_sim || 'N/A';
                         
                         if (log.details) {
                             try {
                                 const parsedDetails = typeof log.details === 'string' ? JSON.parse(log.details) : log.details;
                                 
-                                // For receive_sms action, show the actual sender number
-                                if (log.action === 'receive_sms') {
-                                    detailsText = `From: ${parsedDetails.sender || 'N/A'} To: ${parsedDetails.recipient || 'N/A'}`;
-                                    simCardText = parsedDetails.receiver_sim || 'N/A';
+                                if (log.action === 'send_sms') {
+                                    detailsText = `To: ${parsedDetails.recipient || 'N/A'}`;
+                                } else if (log.action === 'receive_sms') {
+                                    detailsText = `From: ${parsedDetails.sender || 'N/A'}`;
                                 } else {
-                                    detailsText = parsedDetails.formatted_details || log.details;
-                                    simCardText = log.sender_sim || 'N/A';
+                                    detailsText = JSON.stringify(parsedDetails);
                                 }
                             } catch {
                                 detailsText = log.details;
-                                simCardText = log.sender_sim || 'N/A';
                             }
                         }
                         
