@@ -41,7 +41,8 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'pool_use_lifo': True
 }
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
-
+MQTT_HOST = "localhost"
+MQTT_PORT = 1883
 # Initialize database
 db.init_app(app)
 init_db(app)
@@ -209,6 +210,7 @@ def handle_sms_receive_message(payload):
                     'message': message_text,
                     'status': 'SUCCESS'
                 }
+
                 publish.single("sms/status", json.dumps(status_payload), hostname="localhost", port=1883)
 
                 print(f"Successfully saved incoming message from {sender_number} to {receiver_number}")
@@ -419,27 +421,32 @@ def delete_sim_card(sim_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': str(e)}), 500
-
 @app.route('/api/sms', methods=['POST'])
 @require_api_key
 def send_sms():
     try:
+        print("Received SMS send request")
         data = request.get_json()
         if not data:
+            print("No data provided in request")
             return jsonify({'error': 'No data provided'}), 400
 
         # Validate required fields
         if not data.get('recipient'):
+            print("Missing recipient in request")
             return jsonify({'error': 'Recipient phone number is required'}), 400
         if not data.get('message'):
+            print("Missing message in request")
             return jsonify({'error': 'Message content is required'}), 400
 
         recipient = data['recipient']
         message_text = data['message']
         sim_card_id = data.get('sim_card_id')
+        print(f"Processing SMS to {recipient} with sim_card_id: {sim_card_id}")
 
         # Validate phone number format
         if not recipient.startswith('+'):
+            print(f"Invalid phone number format: {recipient}")
             return jsonify({'error': 'Phone number must start with + and include country code'}), 400
 
         # Get SIM card
@@ -447,13 +454,18 @@ def send_sms():
         if sim_card_id:
             sim_card = SimCard.query.get(sim_card_id)
             if not sim_card:
+                print(f"No SIM card found with ID: {sim_card_id}")
                 return jsonify({'error': f'No SIM card found with ID: {sim_card_id}'}), 400
             if sim_card.status != 'active':
+                print(f"SIM card {sim_card_id} is not active")
                 return jsonify({'error': f'SIM card {sim_card_id} is not active'}), 400
         else:
             sim_card = get_next_available_sim()
             if not sim_card:
+                print("No active SIM cards available")
                 return jsonify({'error': 'No active SIM cards available'}), 400
+
+        print(f"Using SIM card: {sim_card.number}")
 
         # Create message record
         message = Message(
@@ -465,8 +477,28 @@ def send_sms():
         )
         db.session.add(message)
         db.session.flush()  # ensure defaults like id and timestamp are generated
+        print(f"Created message record with ID: {message.id}")
 
-        publish.single("sms/send", json.dumps(message.to_dict()), hostname="localhost", port=1883)
+        print(f"Publishing message to MQTT broker at {MQTT_HOST}:{MQTT_PORT}")
+        try:
+            message_dict = message.to_dict()
+            print(f"Message content: {message_dict}")
+            
+            # Choose MQTT topic based on whether sim_card_id is provided
+            mqtt_topic = "sms/send" if not sim_card_id else f"sms/send/{sim_card.number.replace('+', '')}"
+            payload = {"number": message_dict["recipient"],"message": message_dict["message"],"message_id": message_dict["id"]}
+            publish.single(
+                mqtt_topic, 
+                json.dumps(payload), 
+                hostname=MQTT_HOST, 
+                port=MQTT_PORT,
+                keepalive=60,
+                qos=1
+            )
+            print(f"Message published successfully to topic: {mqtt_topic}")
+        except Exception as e:
+            print(f"Failed to publish message: {str(e)}")
+            raise
 
         # Create log details
         log_details = {
@@ -505,6 +537,7 @@ def send_sms():
         db.session.rollback()
         print(f"Error in send_sms: {str(e)}")  # Add logging
         return jsonify({'error': f'Failed to send SMS: {str(e)}'}), 500
+
 
 @app.route('/api/sms/inbox', methods=['GET'])
 @require_api_key

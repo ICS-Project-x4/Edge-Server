@@ -1,6 +1,4 @@
-#!/bin/sh
-'''exec' "/Users/aminebc/Documents/2CS SIL1/ICS/ics-sms-project/icsvenv/bin/python" "$0" "$@"
-' '''
+#!/home/SMShub/Edge-Server/icsvenv/bin/python3
 # -*- coding: utf-8 -*-
 import re
 import sys
