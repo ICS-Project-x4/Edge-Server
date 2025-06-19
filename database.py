@@ -32,14 +32,10 @@ class Message(db.Model):
 
     def to_dict(self):
         return {
-            'id': self.id,
-            'sender': self.sender,
-            'recipient': self.recipient,
+   
+            'number': self.recipient,
             'message': self.message,
-            'timestamp': int(self.timestamp.timestamp()),
-            'status': self.status,
-            'direction': self.direction,
-            'sender_sim': self.sender_sim
+            'message_id': self.id 
         }
 
 class Log(db.Model):

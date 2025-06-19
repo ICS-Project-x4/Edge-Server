@@ -1,7 +1,7 @@
 {
   "API_BASE_URL": "http://localhost:5001",
   "MQTT": {
-    "host": "localhost",
+    "host": "192.168.95.187", 
     "port": 1883,
     "topics": {
       "send_prefix": "sms/send/"
@@ -19,3 +19,4 @@
     "max_logs": 1000
   }
 }
+

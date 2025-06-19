@@ -16,6 +16,12 @@ import paho.mqtt.publish as publish
 import secrets
 from database import db, User, SimCard, Message, Log, init_db, SmsStatus
 
+# Load config
+with open('config.json') as f:
+    config = json.load(f)
+    MQTT_HOST = config['MQTT']['host']
+    MQTT_PORT = config['MQTT']['port']
+
 # Import eventlet and monkey patch
 import eventlet
 eventlet.monkey_patch()
@@ -424,22 +430,28 @@ def delete_sim_card(sim_id):
 @require_api_key
 def send_sms():
     try:
+        print("Received SMS send request")
         data = request.get_json()
         if not data:
+            print("No data provided in request")
             return jsonify({'error': 'No data provided'}), 400
 
         # Validate required fields
         if not data.get('recipient'):
+            print("Missing recipient in request")
             return jsonify({'error': 'Recipient phone number is required'}), 400
         if not data.get('message'):
+            print("Missing message in request")
             return jsonify({'error': 'Message content is required'}), 400
 
         recipient = data['recipient']
         message_text = data['message']
         sim_card_id = data.get('sim_card_id')
+        print(f"Processing SMS to {recipient} with sim_card_id: {sim_card_id}")
 
         # Validate phone number format
         if not recipient.startswith('+'):
+            print(f"Invalid phone number format: {recipient}")
             return jsonify({'error': 'Phone number must start with + and include country code'}), 400
 
         # Get SIM card
@@ -447,13 +459,18 @@ def send_sms():
         if sim_card_id:
             sim_card = SimCard.query.get(sim_card_id)
             if not sim_card:
+                print(f"No SIM card found with ID: {sim_card_id}")
                 return jsonify({'error': f'No SIM card found with ID: {sim_card_id}'}), 400
             if sim_card.status != 'active':
+                print(f"SIM card {sim_card_id} is not active")
                 return jsonify({'error': f'SIM card {sim_card_id} is not active'}), 400
         else:
             sim_card = get_next_available_sim()
             if not sim_card:
+                print("No active SIM cards available")
                 return jsonify({'error': 'No active SIM cards available'}), 400
+
+        print(f"Using SIM card: {sim_card.number}")
 
         # Create message record
         message = Message(
@@ -465,8 +482,28 @@ def send_sms():
         )
         db.session.add(message)
         db.session.flush()  # ensure defaults like id and timestamp are generated
+        print(f"Created message record with ID: {message.id}")
 
-        publish.single("sms/send", json.dumps(message.to_dict()), hostname="localhost", port=1883)
+        print(f"Publishing message to MQTT broker at {MQTT_HOST}:{MQTT_PORT}")
+        try:
+            message_dict = message.to_dict()
+            print(f"Message content: {message_dict}")
+            
+            # Choose MQTT topic based on whether sim_card_id is provided
+            mqtt_topic = "sms/send" if not sim_card_id else f"sms/send/{sim_card.number.replace('+', '')}"
+            
+            publish.single(
+                mqtt_topic, 
+                json.dumps(message_dict), 
+                hostname=MQTT_HOST, 
+                port=MQTT_PORT,
+                keepalive=60,
+                qos=1
+            )
+            print(f"Message published successfully to topic: {mqtt_topic}")
+        except Exception as e:
+            print(f"Failed to publish message: {str(e)}")
+            raise
 
         # Create log details
         log_details = {
