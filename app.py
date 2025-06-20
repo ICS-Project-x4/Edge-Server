@@ -246,8 +246,18 @@ try:
 except Exception as e:
     print(f"Failed to connect to MQTT broker: {str(e)}")
 
+
 def get_next_available_sim():
-    return SimCard.query.filter_by(status='active').first()
+    # Find the active SIM card with the least number of outgoing messages
+    sim = (
+        db.session.query(SimCard)
+        .filter_by(status='active')
+        .outerjoin(Message, (SimCard.id == Message.sender_sim) & (Message.direction == 'outgoing'))
+        .group_by(SimCard.id)
+        .order_by(func.count(Message.id))
+        .first()
+    )
+    return sim
 
 def require_api_key(f):
     @wraps(f)
