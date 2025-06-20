@@ -494,8 +494,8 @@ def send_sms():
             message_dict = message.to_dict()
             print(f"Message content: {message_dict}")
             
-            # Choose MQTT topic based on whether sim_card_id is provided
-            mqtt_topic = "sms/send" if not sim_card_id else f"sms/send/{sim_card.number.replace('+', '')}"
+            # Always send to topic sms/send/<sender_number> (with + removed)
+            mqtt_topic = f"sms/send/{sim_card.number.replace('+', '')}"
             payload = {"number": message_dict["recipient"],"message": message_dict["message"],"message_id": message_dict["id"]}
             publish.single(
                 mqtt_topic, 
