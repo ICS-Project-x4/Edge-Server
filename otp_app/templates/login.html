@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Login - OTP Authentication{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1>🔐 OTP Login</h1>
+    <p>Enter your phone number to receive an OTP</p>
+</div>
+
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ 'error' if category == 'error' else 'success' }}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<form method="POST" action="{{ url_for('login') }}">
+    <div class="form-group">
+        <label for="phone_number">Phone Number</label>
+        <input type="tel" 
+               id="phone_number" 
+               name="phone_number" 
+               placeholder="+1234567890" 
+               required 
+               pattern="^\+?[\d\s\-\(\)]{10,}$"
+               title="Please enter a valid phone number with country code">
+    </div>
+    
+    <button type="submit" class="btn">
+        📱 Send OTP
+    </button>
+</form>
+
+<script>
+    // Auto-format phone number input
+    document.getElementById('phone_number').addEventListener('input', function(e) {
+        let value = e.target.value;
+        
+        // If user starts typing without +, add it
+        if (value.length > 0 && !value.startsWith('+')) {
+            value = '+' + value.replace(/\D/g, '');
+        }
+        
+        // Only keep digits after the +
+        if (value.startsWith('+')) {
+            value = '+' + value.substring(1).replace(/\D/g, '');
+        }
+        
+        e.target.value = value;
+    });
+
+    // Form validation
+    document.querySelector('form').addEventListener('submit', function(e) {
+        const phoneInput = document.getElementById('phone_number');
+        const phoneValue = phoneInput.value.trim();
+        
+        if (!phoneValue) {
+            e.preventDefault();
+            alert('Please enter your phone number');
+            phoneInput.focus();
+            return;
+        }
+        
+        if (phoneValue.replace(/\D/g, '').length < 10) {
+            e.preventDefault();
+            alert('Please enter a valid phone number');
+            phoneInput.focus();
+            return;
+        }
+    });
+</script>
+{% endblock %}

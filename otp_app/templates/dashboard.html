@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - OTP Authentication{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1>🎉 Welcome!</h1>
+    <p>You have successfully logged in</p>
+</div>
+
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ 'error' if category == 'error' else 'success' }}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<div class="phone-display">
+    📱 Logged in as: {{ phone }}
+</div>
+
+<div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem;">
+    <h3 style="color: #495057; margin-bottom: 1rem;">🔐 Secure Dashboard</h3>
+    <p style="color: #6c757d; margin-bottom: 1rem;">
+        Congratulations! You have successfully authenticated using OTP verification. 
+        This is a protected area that can only be accessed after phone number verification.
+    </p>
+    
+    <div style="background: white; padding: 1rem; border-radius: 5px; border-left: 4px solid #28a745;">
+        <strong>✅ Authentication Status:</strong> Verified<br>
+        <strong>📱 Phone Number:</strong> {{ phone }}<br>
+        <strong>🕐 Login Time:</strong> <span id="login-time"></span>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+    <div style="background: #e3f2fd; padding: 1rem; border-radius: 8px; text-align: center;">
+        <h4 style="color: #1976d2; margin-bottom: 0.5rem;">🛡️ Secure</h4>
+        <p style="color: #424242; font-size: 0.9rem;">OTP-based authentication</p>
+    </div>
+    
+    <div style="background: #f3e5f5; padding: 1rem; border-radius: 8px; text-align: center;">
+        <h4 style="color: #7b1fa2; margin-bottom: 0.5rem;">⚡ Fast</h4>
+        <p style="color: #424242; font-size: 0.9rem;">Quick SMS verification</p>
+    </div>
+</div>
+
+<a href="{{ url_for('logout') }}" class="btn" onclick="return confirm('Are you sure you want to logout?')">
+    🚪 Logout
+</a>
+
+<script>
+    // Display current login time
+    document.getElementById('login-time').textContent = new Date().toLocaleString();
+    
+    // Add some interactive effects
+    document.querySelectorAll('[style*="background: #e3f2fd"], [style*="background: #f3e5f5"]').forEach(function(card) {
+        card.style.transition = 'transform 0.2s ease, box-shadow 0.2s ease';
+        card.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-2px)';
+            this.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+        });
+        card.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(0)';
+            this.style.boxShadow = 'none';
+        });
+    });
+    
+    // Auto-logout after 30 minutes of inactivity
+    let inactivityTimer;
+    const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+    
+    function resetInactivityTimer() {
+        clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(function() {
+            if (confirm('You have been inactive for 30 minutes. Do you want to stay logged in?')) {
+                resetInactivityTimer();
+            } else {
+                window.location.href = "{{ url_for('logout') }}";
+            }
+        }, INACTIVITY_TIMEOUT);
+    }
+    
+    // Track user activity
+    ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'].forEach(function(event) {
+        document.addEventListener(event, resetInactivityTimer, true);
+    });
+    
+    resetInactivityTimer();
+</script>
+{% endblock %}

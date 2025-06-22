@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  # MQTT Broker
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: sms_mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    networks:
+      - sms_network
+
+  # Main SMS Gateway
+  sms_gateway:
+    build: .
+    container_name: sms_gateway
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./instance:/app/instance
+      - ./config.json:/app/config.json
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=production
+    depends_on:
+      - mosquitto
+    networks:
+      - sms_network
+    restart: unless-stopped
+
+  # OTP Application
+  otp_app:
+    build:
+      context: ./otp_app
+      dockerfile: Dockerfile
+    container_name: otp_app
+    ports:
+      - "5002:5002"
+    volumes:
+      - ./otp_app/templates:/app/templates
+    environment:
+      - FLASK_APP=otp_app_backend.py
+      - FLASK_ENV=production
+    depends_on:
+      - sms_gateway
+    networks:
+      - sms_network
+    restart: unless-stopped
+
+networks:
+  sms_network:
+    driver: bridge
+
+volumes:
+  mosquitto_data:
+  mosquitto_log: 

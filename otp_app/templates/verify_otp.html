@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Verify OTP - OTP Authentication{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1>📲 Verify OTP</h1>
+    <p>Enter the 6-digit code sent to your phone</p>
+</div>
+
+<div class="phone-display">
+    📱 {{ phone }}
+</div>
+
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ 'error' if category == 'error' else 'success' }}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<div id="timer" class="timer"></div>
+
+<form method="POST" action="{{ url_for('verify_otp') }}">
+    <div class="form-group">
+        <label for="otp">Enter OTP</label>
+        <input type="text" 
+               id="otp" 
+               name="otp" 
+               class="otp-input"
+               placeholder="000000" 
+               maxlength="6" 
+               pattern="[0-9]{6}" 
+               required 
+               autocomplete="one-time-code"
+               title="Please enter the 6-digit OTP">
+    </div>
+    
+    <button type="submit" class="btn" id="verify-btn">
+        ✅ Verify OTP
+    </button>
+</form>
+
+<a href="{{ url_for('resend_otp') }}" class="btn btn-secondary" id="resend-btn">
+    🔄 Resend OTP
+</a>
+
+<a href="{{ url_for('login') }}" class="link">← Back to login</a>
+
+<script>
+    // Timer countdown (5 minutes = 300 seconds)
+    let timeLeft = 300;
+    const timerElement = document.getElementById('timer');
+    const resendBtn = document.getElementById('resend-btn');
+    
+    function updateTimer() {
+        if (timeLeft <= 0) {
+            timerElement.innerHTML = '<span style="color: #dc3545;">⏰ OTP Expired</span>';
+            resendBtn.style.display = 'block';
+            return;
+        }
+        
+        const minutes = Math.floor(timeLeft / 60);
+        const seconds = timeLeft % 60;
+        timerElement.innerHTML = `⏱️ Expires in ${minutes}:${seconds.toString().padStart(2, '0')}`;
+        
+        timeLeft--;
+        setTimeout(updateTimer, 1000);
+    }
+    
+    updateTimer();
+    
+    // Auto-focus OTP input
+    document.getElementById('otp').focus();
+    
+    // Only allow numbers in OTP input
+    document.getElementById('otp').addEventListener('input', function(e) {
+        e.target.value = e.target.value.replace(/\D/g, '');
+        
+        // Auto-submit when 6 digits are entered
+        if (e.target.value.length === 6) {
+            document.querySelector('form').submit();
+        }
+    });
+    
+    // Prevent non-numeric input
+    document.getElementById('otp').addEventListener('keypress', function(e) {
+        if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'Enter'].includes(e.key)) {
+            e.preventDefault();
+        }
+    });
+    
+    // Form validation
+    document.querySelector('form').addEventListener('submit', function(e) {
+        const otpInput = document.getElementById('otp');
+        const otpValue = otpInput.value.trim();
+        
+        if (!otpValue || otpValue.length !== 6) {
+            e.preventDefault();
+            alert('Please enter the complete 6-digit OTP');
+            otpInput.focus();
+            return;
+        }
+    });
+    
+    // Handle resend button click
+    document.getElementById('resend-btn').addEventListener('click', function(e) {
+        e.preventDefault();
+        if (confirm('Are you sure you want to resend the OTP?')) {
+            window.location.href = this.href;
+        }
+    });
+</script>
+{% endblock %}
